@@ -1955,6 +1955,9 @@ func _begin_game(message: Dictionary) -> void:
 	_shell.auto_process = false
 	var started := Time.get_ticks_msec()
 	_load_log.clear()
+	var world_was_visible: bool = _world.visible
+	_world.hide() # keep partially constructed terrain behind the loading screen
+	_on_load_progress(0) # present the initial bar before synchronous loading
 	var opts := {"progress": Callable(self, "_on_load_progress"), "test_hooks": _end or not _zoom1.is_empty() or _rules_shot > 0 or not _gamemodes.is_empty() or _uber1 > 0 or _play_script.ends_with("spell3_player.gd") or _play_script.ends_with("ownerfix1_player.gd") or _play_script.ends_with("devport7_player.gd") or _play_script.ends_with("ownerfix2_player.gd")} # lane ZOOM-1: the bars scenario hurts some units (logged)
 	if _record and _net_state.is_empty():
 		opts["record"] = _last_replay_path() # lane MP-2: every skirmish is recorded
@@ -1964,10 +1967,12 @@ func _begin_game(message: Dictionary) -> void:
 	if rep.has("timings_ms"): # lane PERF-1: where the load went (ms per stage)
 		print("GAME load timings: ", JSON.stringify(rep.timings_ms))
 	if not rep.ok:
+		_world.visible = world_was_visible
 		for e in rep.errors.slice(0, 20):
 			print("  load error: ", e)
 		_fail("start_new_game failed")
 		return
+	_world.visible = world_was_visible
 	_enter_game(rep)
 	if _online_spectate:
 		for arg in OS.get_cmdline_user_args():
@@ -2141,7 +2146,7 @@ func _on_load_progress(percent: int) -> void:
 	_shell.set_load_progress(percent)
 	_shell.tick(0.033)
 	_shell.render(true)
-	RenderingServer.force_draw(false, 0.0)
+	RenderingServer.force_draw(true, 0.0) # swap buffers: progress must reach the window
 	if _menu1_runner != null and percent >= 40:
 		_menu1_runner.loading_check(percent) # lane MENU-1: the loading screen's layering and picture
 	if not _loading_shot_done and percent >= 40 and not _screens.is_empty():
