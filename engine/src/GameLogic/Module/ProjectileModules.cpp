@@ -9,6 +9,9 @@
 #include "GameLogic/SnapshotXfer.h"
 #include "GameLogic/Module/ProjectileModules.h"
 #include "GameLogic/Module/StructureModules.h"
+#include "GameLogic/Module/GateModules.h"
+#include "GameLogic/Object/ObjectGeometry.h"
+#include "GameLogic/Object/PartitionManager.h"
 
 #include "Common/StateHash.h"
 #include "Common/Thing/ModuleFactory.h"
@@ -26,7 +29,9 @@
 
 #include <cstddef>
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace
 {
@@ -178,6 +183,123 @@ Coord3D normalizeCoord(Coord3D v) // RW 0x403175
 		v.z = SimMath::mulf32(v.z, inv);
 	}
 	return v;
+}
+
+// ---- notre version : une porte fermée arrête les projectiles qui la traversent ----
+// Les warheads des flèches de RotWK disent ProjectileCollidesWith = ... STRUCTURES WALLS, mais le test (RW 0x6CC79C, S-364) n'est pas porté et les flèches
+// sont NO_COLLIDE : sans cette règle, une flèche tirée de derrière une porte fermée la traverse. On teste le segment parcouru pendant la frame contre la
+// boîte « Closed » des objets BLOCKING_GATE fermés (opérations SimMath : même résultat sur arm64 et x86_64).
+
+// la boîte de la porte fermée, dans l'espace de l'objet (la forme nommée « Closed », sinon la première)
+const ObjectGeometry::Shape *closedGateShape(const ThingTemplate &tt)
+{
+	static std::mutex lock;
+	static std::unordered_map<const ThingTemplate *, std::vector<ObjectGeometry::Shape>> cache;
+	std::lock_guard<std::mutex> guard(lock);
+	auto it = cache.find(&tt);
+	if (it == cache.end())
+	{
+		it = cache.emplace(&tt, ObjectGeometry::shapesOf(tt)).first;
+	}
+	const std::vector<ObjectGeometry::Shape> &shapes = it->second;
+	for (const ObjectGeometry::Shape &sh : shapes)
+	{
+		if (sh.name == "Closed")
+		{
+			return &sh;
+		}
+	}
+	return shapes.empty() ? nullptr : &shapes.front();
+}
+
+// un point du monde dans l'espace de l'objet (la base est en lignes, ses colonnes sont les axes de l'objet)
+Coord3D toObjectSpace(const Object &o, const Coord3D &p)
+{
+	const Coord3D &c = *o.getPosition();
+	const float *b = o.getBasis();
+	const float dx = SimMath::subf32(p.x, c.x), dy = SimMath::subf32(p.y, c.y), dz = SimMath::subf32(p.z, c.z);
+	auto dot = [&](float a0, float a1, float a2) { return SimMath::addf32(SimMath::addf32(SimMath::mulf32(a0, dx), SimMath::mulf32(a1, dy)), SimMath::mulf32(a2, dz)); };
+	return Coord3D{ dot(b[0], b[3], b[6]), dot(b[1], b[4], b[7]), dot(b[2], b[5], b[8]) };
+}
+
+// le segment a -> b (espace de l'objet) coupe-t-il la boîte [lo, hi] ? (méthode des dalles)
+bool segmentHitsBox(const Coord3D &a, const Coord3D &b, const float lo[3], const float hi[3])
+{
+	const float pa[3] = { a.x, a.y, a.z }, pb[3] = { b.x, b.y, b.z };
+	float t0 = 0.0f, t1 = 1.0f;
+	for (int i = 0; i < 3; ++i)
+	{
+		const float d = SimMath::subf32(pb[i], pa[i]);
+		if (d == 0.0f)
+		{
+			if (pa[i] < lo[i] || pa[i] > hi[i])
+			{
+				return false;
+			}
+			continue;
+		}
+		float ta = SimMath::divf32(SimMath::subf32(lo[i], pa[i]), d);
+		float tb = SimMath::divf32(SimMath::subf32(hi[i], pa[i]), d);
+		if (ta > tb)
+		{
+			std::swap(ta, tb);
+		}
+		t0 = ta > t0 ? ta : t0;
+		t1 = tb < t1 ? tb : t1;
+		if (t0 > t1)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+// la porte fermée que le segment from -> to traverse (ni la cible visée, ni une porte au-dessus de laquelle se tient le tireur), sinon null
+Object *closedGateCrossed(GameLogic &logic, const Coord3D &from, const Coord3D &to, ObjectID victimID, const Object *launcher)
+{
+	static const int kBlockingGate = CombatNames::kindOf("BLOCKING_GATE");
+	if (kBlockingGate < 0)
+	{
+		return nullptr;
+	}
+	const Coord3D mid{ SimMath::mulf32(SimMath::addf32(from.x, to.x), 0.5f), SimMath::mulf32(SimMath::addf32(from.y, to.y), 0.5f), 0.0f };
+	const float hx = SimMath::subf32(to.x, from.x), hy = SimMath::subf32(to.y, from.y);
+	const float halfLen = SimMath::mulf32(SimMath::fstpDword(SimMath::sqrtPC24((double)SimMath::addf32(SimMath::mulf32(hx, hx), SimMath::mulf32(hy, hy)))), 0.5f);
+	PartitionFilterFn gates([](Object &o) { return o.isKindOf((unsigned)kBlockingGate) && !o.isEffectivelyDead(); });
+	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(mid, SimMath::addf32(halfLen, 80.0f), FROM_CENTER_2D, { &gates }, ITER_FASTEST))
+	{
+		Object *gate = h.object;
+		if (!gate || gate->getID() == victimID || !gate->getTemplate())
+		{
+			continue;
+		}
+		const GateOpenAndCloseBehavior *g = GateOpenAndCloseBehavior::findGate(*gate);
+		if (!g || g->geometryState() == GateOpenAndCloseBehavior::GEOMETRY_OPEN)
+		{
+			continue;
+		}
+		const ObjectGeometry::Shape *sh = closedGateShape(*gate->getTemplate());
+		if (!sh || sh->type != ObjectGeometry::SHAPE_BOX)
+		{
+			continue;
+		}
+		const float lo[3] = { SimMath::subf32(sh->offsetX, sh->majorRadius), SimMath::subf32(sh->offsetY, sh->minorRadius), sh->offsetZ };
+		const float hi[3] = { SimMath::addf32(sh->offsetX, sh->majorRadius), SimMath::addf32(sh->offsetY, sh->minorRadius), SimMath::addf32(sh->offsetZ, sh->height) };
+		if (launcher)
+		{
+			// un tireur posté sur la porte (ou juste au-dessus) tire librement
+			const Coord3D l = toObjectSpace(*gate, *launcher->getPosition());
+			if (l.x >= SimMath::subf32(lo[0], 10.0f) && l.x <= SimMath::addf32(hi[0], 10.0f) && l.y >= lo[1] && l.y <= hi[1])
+			{
+				continue;
+			}
+		}
+		if (segmentHitsBox(toObjectSpace(*gate, from), toObjectSpace(*gate, to), lo, hi))
+		{
+			return gate;
+		}
+	}
+	return nullptr;
 }
 } // namespace
 
@@ -637,6 +759,19 @@ UpdateSleepTime BezierProjectileBehavior::update()
 		}
 		m_pendingFrame = logic.getFrame();
 		m_pendingValid = true;
+	}
+	// notre version : une porte fermée entre le point précédent et celui-ci arrête le projectile, sans dégâts
+	if (m_currentFlightPathStep > 0)
+	{
+		const Coord3D &prev = m_flightPath[(size_t)m_currentFlightPathStep - 1];
+		if (closedGateCrossed(logic, prev, step, m_victimID, logic.findObjectByID(m_launcherID)))
+		{
+			m_hasDetonated = true;
+			obj->setStatus(OBJECT_STATUS_NO_COLLISIONS, true);
+			logic.destroyObject(obj);
+			++logic.combat().counters().projectilesDetonated;
+			return UPDATE_SLEEP_FOREVER;
+		}
 	}
 	// RW 0x85F78E..0x85F83A the bridge layers: ground only (S-362)
 	if (m_victimID != INVALID_ID)
