@@ -14,6 +14,7 @@
 #include "Common/SpecialPower.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
 #include "GameLogic/Object/ExperienceTracker.h"
+#include "GameClient/Drawable.h"
 #include "GameClient/HudObjects.h"
 #include "GameClient/GUI/AptScreens/AptSpellStore.h"
 #include "GameClient/SpellBookUI.h"
@@ -2122,7 +2123,10 @@ void fightsOf(const std::string &faction, Results &res)
 					{
 						at = target->getContain()->getContainedItemsList()->front();
 					}
-					g.clickAt({ at->getPosition()->x, at->getPosition()->y, at->getPosition()->z + 10.0f }); // RotWK's default mouse: a left click on an enemy attacks
+					// the click goes where the member is drawn (the last completed frame's pose): a member still walking to its slot stands a step ahead of its drawing
+					const Drawable *drawn = g.rig.game->drawables().findByObject(at->getID());
+					const Coord3D seen = drawn ? *drawn->getPosition() : *at->getPosition();
+					g.clickAt({ seen.x, seen.y, seen.z + 10.0f }); // RotWK's default mouse: a left click on an enemy attacks
 					const unsigned start = g.frame();
 					float now = before;
 					for (int f = 0; f < 200 && now >= before; ++f)
@@ -2833,8 +2837,9 @@ TEST_CASE("factb spell book: every Isengard spell book power cast through the HU
 	Results r;
 	spellBookOf("FactionIsengard", r);
 	r.print("spell book FactionIsengard");
+	// Taint's own effect is not asserted (S-1997); the scene showed another effect beside it until the formations were centred on their hordes (RW 0x86C4EA)
 	r.check({ { "spell SpellBookDevastation", "S-921 (SPELL-3)" }, { "spell SpellBookIndustry", "S-1997" },
-		{ "spell SpellBookFueltheFires", "S-1997" }, { "spell SpellBookDragonStrike", "S-1997" } });
+		{ "spell SpellBookFueltheFires", "S-1997" }, { "spell SpellBookDragonStrike", "S-1997" }, { "spell SpellBookIsengardTaint", "S-1997" } });
 }
 
 TEST_CASE("factb spell book: every Mordor spell book power cast through the HUD's spell bar shows its effect")
@@ -3670,7 +3675,6 @@ TEST_CASE("factc units: every Goblin and Angmar unit, horde and hero ability and
 			  { { "* Command_ToggleStance", "S-289" },
 				{ "GoblinArcherHorde Command_GoblinArcherPoisonArrows", "S-1997|HordeAttackNugget" },
 				{ "MordorWorker Command_Harvest", "S-1993|no effect of it is asserted" },
-				{ "WildBabyDrakeHorde Command_FireDrakeBroodInferno", "S-2006|BabyDrakeInferno: no result" },
 				{ "WildMountainGiant Command_SpecialAbilityWildMountainGiantStomp", "S-2006|WildMountainGiantStomp: no result" },
 				{ "WildPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } });
 	factcCase("units", "FactionAngmar", unitsOf,
@@ -3709,10 +3713,10 @@ TEST_CASE("factc damage: the first hit of every Goblin and Angmar unit, horde an
 	{
 		return;
 	}
-	// merge q8 (PATHPERF-1's placement on FLY-1's tree): the Goblin archers' first frame of damage on the hero is two different hits of their weapon
-	// summed (4.35 = 3.75 + 0.6), which the window's "k copies of one hit" does not accept (S-4104)
-	factcCase("damage", "FactionWild", heroDamageOf,
-			  { { "damage GoblinArcherHorde", "S-4104|the first hit took 4.35" } });
+	// merge q8 (PATHPERF-1's placement on FLY-1's tree): the Goblin archers' first frame of damage on the hero was two different hits of their weapon
+	// summed (4.35 = 3.75 + 0.6), which the window's "k copies of one hit" does not accept (S-4104, closed: since the formations are centred on their
+	// hordes, RW 0x86C4EA, the first frame holds one hit)
+	factcCase("damage", "FactionWild", heroDamageOf, {});
 	// lane PLAY-4 r3: RotWK's melee reach (RW 0x6ED843's footprint boxes) brings the Goblin King, the Marauder swords and the Dark Dunedain onto Boromir (S-2005
 	// keeps the Necromancers); on the site kept on the map the Thrall Master's target is in sight (S-565 no longer applies)
 	// and Karsh's first loss on the site kept on the map is his touch's two nuggets (63), not S-2004's 0.25.
@@ -3730,8 +3734,11 @@ TEST_CASE("factc upgrade effects: every Goblin and Angmar weapon and armour upgr
 	}
 	factcCase("upgrade effects", "FactionWild", upgradeEffectsOf,
 			  { { "upgrade effect GoblinSpiderRiderHorde Upgrade_WildFireArrows", "S-2008|did not change the INI hit" } });
-	// lane PLAY-4 r3: the armour scenes show hits since Boromir reaches the members with RotWK's melee reach (RW 0x6ED843's footprint boxes)
-	factcCase("upgrade effects", "FactionAngmar", upgradeEffectsOf, {});
+	// lane PLAY-4 r3: the armour scenes show hits since Boromir reaches the members with RotWK's melee reach (RW 0x6ED843's footprint boxes). The snow
+	// trolls' Dark Iron Armor keeps Boromir's hit at its INI 300 x 1: the sweep's earlier pass compared a 600 drop (two hits in one frame) with 300; with
+	// the formations centred on their hordes (RW 0x86C4EA) both scenes show single hits of 300 (S-2008)
+	factcCase("upgrade effects", "FactionAngmar", upgradeEffectsOf,
+			  { { "upgrade effect AngmarSnowTrollHorde Upgrade_AngmarDarkIronArmor", "S-2008|the smallest hit taken did not shrink" } });
 }
 
 TEST_CASE("factc spell book: every Goblin and Angmar spell bought in the store and cast through the spell bar shows its effect")

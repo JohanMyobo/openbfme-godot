@@ -86,13 +86,17 @@ const StructRow kRows[] = {
 	// Merge of IDLE-1 r2 (22e29980) into MOVE-3 with MOVE-3 r4: re-measured on the reference PC, the IDLE-1 values above unchanged. Engine pins
 	// Lane PLAY-4 (the stances' guard, AIGuard.h: an idle Battle-stance horde guards its spot, whose idle and return states draw the logic random generator,
 	// RW 0x949630 / 0x94A571): MordorBarracks 54 -> 62, GoblinCave 112 -> 120, the others unchanged. Engine pins
-	{ "FactionMen", "GondorBarracks", "ActiveBody", 3000.0f, 20.0f, 75, 155.0f, true, 438 },
-	{ "FactionElves", "ElvenBarracks", "StructureBody", 3000.0f, 20.0f, 0, 100.0f, true, 344 }, // no BountyValue line
-	{ "FactionDwarves", "DwarfBarracks", "ActiveBody", 5000.0f, 20.0f, 125, 155.0f, true, 604 },
-	{ "FactionIsengard", "IsengardUrukPit", "StructureBody", 3000.0f, 20.0f, 88, 89.0f, true, 344 },
-	{ "FactionMordor", "MordorBarracks", "StructureBody", 1500.0f, 100.0f, 0, 0.0f, false, 62 },
-	{ "FactionWild", "GoblinCave", "ActiveBody", 1500.0f, 50.0f, 100, 25.0f, true, 120 },
-	{ "FactionAngmar", "AngmarBarracks", "ActiveBody", 3000.0f, 20.0f, 75, 155.0f, true, 438 },
+	// The formations centred on their hordes (RW 0x86C4EA; measured with the Windows llvm-mingw build): GondorBarracks 438 -> 402, ElvenBarracks
+	// 344 -> 408, DwarfBarracks 604 -> 720, IsengardUrukPit 344 -> 410, MordorBarracks 62 -> 64, GoblinCave 120 -> 116, AngmarBarracks 438 -> 402. Engine pins
+	// The destination adjustment spiralling around the cell (RW 0x6FA2A4 / 0x6F3C87; the same build): MordorBarracks 64 -> 72, GoblinCave 116 -> 112,
+	// the others unchanged. Engine pins
+	{ "FactionMen", "GondorBarracks", "ActiveBody", 3000.0f, 20.0f, 75, 155.0f, true, 402 },
+	{ "FactionElves", "ElvenBarracks", "StructureBody", 3000.0f, 20.0f, 0, 100.0f, true, 408 }, // no BountyValue line
+	{ "FactionDwarves", "DwarfBarracks", "ActiveBody", 5000.0f, 20.0f, 125, 155.0f, true, 720 },
+	{ "FactionIsengard", "IsengardUrukPit", "StructureBody", 3000.0f, 20.0f, 88, 89.0f, true, 410 },
+	{ "FactionMordor", "MordorBarracks", "StructureBody", 1500.0f, 100.0f, 0, 0.0f, false, 72 },
+	{ "FactionWild", "GoblinCave", "ActiveBody", 1500.0f, 50.0f, 100, 25.0f, true, 112 },
+	{ "FactionAngmar", "AngmarBarracks", "ActiveBody", 3000.0f, 20.0f, 75, 155.0f, true, 402 },
 };
 
 // n * (n - 1) / 2 * 1.28 >= H, the first n

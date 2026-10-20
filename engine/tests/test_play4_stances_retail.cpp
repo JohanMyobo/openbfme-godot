@@ -47,6 +47,7 @@ struct Chase
 	float outerRange = 0.0f; // the outer state's exit radius (getAdjustedVisionRange, RW 0x6FF412)
 	float speed = 0.0f;      // the horde's locomotor speed per frame (curLocomotorSpeed)
 	bool noted3802 = false;
+	bool noted5145 = false; // stop S-5145: a HoldGround guard entered the FACE_OBJECT emotion
 	unsigned lastState = 0;
 	bool sawOuter = false, sawReturn = false;
 };
@@ -93,7 +94,9 @@ Chase runChase(starttest::Shared *st, int stance)
 	out.guardRange = AIGuardMachine::getStdGuardRange(*unit);
 	out.outerRange = AIGuardMachine::getAdjustedVisionRange(*unit);
 	out.speed = ai->curLocomotorSpeed();
-	Object *foe = live.createObject("MordorFighterHorde", enemy->getPlayerIndex(), Coord3D{ c0.x + 120.0f, c0.y, 0.0f }, 0.0f, &error);
+	// 150 ahead: inside the guard range (315), the two formations (centred on their hordes, RW 0x86C4EA) a step apart, so the guard finds the enemy before it
+	// strikes (at 120 the formations touch at once: the attacked horde's FACE_OBJECT emotion comes first, stop S-5145)
+	Object *foe = live.createObject("MordorFighterHorde", enemy->getPlayerIndex(), Coord3D{ c0.x + 150.0f, c0.y, 0.0f }, 0.0f, &error);
 	REQUIRE_MESSAGE(foe, error);
 	for (int i = 0; i < 15; ++i)
 	{
@@ -120,6 +123,7 @@ Chase runChase(starttest::Shared *st, int stance)
 	for (const auto &kv : logic.notedStopHits())
 	{
 		out.noted3802 = out.noted3802 || kv.first == guardStopLine();
+		out.noted5145 = out.noted5145 || kv.first.rfind("[S-5145] ", 0) == 0;
 	}
 	return out;
 }
@@ -220,9 +224,14 @@ TEST_CASE("play4 stances retail: a fleeing enemy is chased out of the guarded sp
 	REQUIRE(hold.speed > 0.0f);
 	CHECK(battle.sawOuter);
 	CHECK_FALSE(hold.sawOuter);
-	CHECK(hold.sawReturn);
-	CHECK(hold.maxFromSpot <= hold.speed * (innerFrames + brakingFrames));           // HoldGround: no further than the inner attack and the braking take it
-	CHECK(battle.maxFromSpot > hold.maxFromSpot);                                   // Battle: the outer state pursues beyond that
+	// stop S-5145: a melee horde in HoldGround meets its enemy only at contact, where the attacked horde's FACE_OBJECT emotion (temporary state 59, RW 0x75638B)
+	// runs the idle state's mood scan (RW 0x7553AB) and its plain attack order replaces the guard: the horde follows the fleeing enemy with no leash and never
+	// walks back. Pinned until the stop is resolved (with a working HoldGround the horde returns, sawReturn, no further from the spot than
+	// hold.speed * (innerFrames + brakingFrames), and Battle's outer state pursues farther than it)
+	CHECK_FALSE(hold.sawReturn);
+	CHECK(hold.lastState == (unsigned)AI_ATTACK_OBJECT);
+	CHECK(hold.noted5145);
+	CHECK_FALSE(battle.noted5145);
 	CHECK(battle.maxFromSpot <= battle.outerRange + battle.speed * brakingFrames);  // the outer state's leash: the vision range around the spot
 	CHECK(aggressive.maxFromSpot > battle.outerRange);                             // Aggressive: no guard, the plain attack follows the enemy without a leash
 	// stop S-3802 (only the LOCATION guard of the stances is ported) is reported by every game whose units guard; Aggressive does not guard

@@ -515,8 +515,13 @@ TEST_CASE("attack1 heroes retail: the mounted Witch-king and Mouth of Sauron, or
 	// Merge queue q12 (the q11 ATTACK-1 / BACKLOG-1 pins against this batch, measured on the merged tree on a CI host; the lane that moved them was not separated): the swing, kill, blocked and distance
 	// pins moved. The CRUSHER_LEVEL -1 case is no longer blocked (blocked 0 frames; the Witch-king makes no swing at all and stays 69.9 away, the Mouth of Sauron swings once
 	// from 41.3): a change of behaviour to review, not only of numbers.
-	for (const Case &c : { Case{ "FactionAngmar", "AngmarWitchking", 5u, 12u, 225.0f, { 800.0f, 112.0f }, 2u, 450.0f, 675.0f, { { 1500.0f, 800.0f }, { 700.0f, 700.0f } }, 0, -1, 0u, 0.0f, 69.9072f, 0.789662f },
-			 Case{ "FactionMordor", "MordorMouthOfSauron", 11u, 11u, 150.0f, { 640.0f, 320.0f }, 7u, 75.0f, 525.0f, { { 1500.0f, 640.0f }, { 860.0f, 640.0f }, { 220.0f, 220.0f } }, 0, -1, 1u, 75.0f, 41.3165f, 20.1465f } })
+	// The formations centred on their hordes (RW 0x86C4EA; measured with the Windows llvm-mingw build): the CRUSHER_LEVEL -1 heroes are blocked again, as r2
+	// describes (the Witch-king 10 frames from frame 31, one swing; the Mouth of Sauron 14 from frame 20, four swings), and neither crush run lands a
+	// CrushWeapon delivery: the Witch-king's four swings kill 19 members, the Mouth of Sauron's nine kill 9. The crusher level 1 runs stay unblocked.
+	// The destination adjustment spiralling around the cell (RW 0x6FA2A4; the same build): the Witch-king's five swings kill all 20 members (blocked with
+	// CRUSHER_LEVEL -1 for 11 frames from frame 13), the Mouth of Sauron's run crushes two again (150) before his seven swings (blocked 15 frames from frame 20).
+	for (const Case &c : { Case{ "FactionAngmar", "AngmarWitchking", 5u, 20u, 0.0f, { 800.0f, 112.0f }, 5u, 525.0f, 1500.0f, { { 1500.0f, 800.0f }, { 700.0f, 700.0f } }, 11, 13, 1u, 525.0f, 60.9063f, 1.65727f },
+			 Case{ "FactionMordor", "MordorMouthOfSauron", 11u, 11u, 150.0f, { 640.0f, 320.0f }, 7u, 75.0f, 525.0f, { { 1500.0f, 640.0f }, { 860.0f, 640.0f }, { 220.0f, 220.0f } }, 15, 20, 4u, 300.0f, 59.5001f, 15.1928f } })
 	{
 		INFO(std::string(c.hero));
 		const ThingTemplate *tt = s->world->things().findTemplate(c.hero);

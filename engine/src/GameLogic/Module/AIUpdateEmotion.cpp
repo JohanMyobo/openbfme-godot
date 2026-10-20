@@ -7,6 +7,7 @@
 #include "Common/GameCommon.h"
 #include "Common/Thing/ThingTemplate.h"
 #include "GameLogic/AI/AIEmotionStates.h"
+#include "GameLogic/AI/AIGuard.h"
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object/Contain/HordeContainRuntime.h"
@@ -27,6 +28,11 @@ const char *const kStopEmotionAI =
 	"SimMath::acosDet; state 48's VoiceDesperateAttack client event is not sent; state 21 is defined (20's success) but no RotWK caller of state 20 as a normal state is known; a move resumed after a panic tests its arrival against the "
 	"panic's safe path, which is still the AI's path (RW 0x748E46), and ends there";
 
+const char *const kStopHoldGroundEmotion =
+	"[S-5145] a guard in HoldGround (GUARDMODE_GUARD_WITHOUT_PURSUIT) entered the FACE_OBJECT emotion (RW 0x662FC8 case 4): the temporary state 59 runs the idle "
+	"state's mood scan (RW 0x75638B -> 0x7553AB), whose attack order replaces the guard and its leash; whether RotWK's scan leaves a guard alone (its gate test of "
+	"AI + 0x34, RW 0x668489) is not read";
+
 HordeContainInterface *hordeOf(Object &obj)
 {
 	ContainModuleInterface *c = obj.getContain();
@@ -36,7 +42,7 @@ HordeContainInterface *hordeOf(Object &obj)
 
 std::vector<std::string> AIUpdateInterface::emotionStops()
 {
-	std::vector<std::string> out = { kStopEmotionAI };
+	std::vector<std::string> out = { kStopEmotionAI, kStopHoldGroundEmotion };
 	for (const std::string &s : HordeContain::emotionStops())
 	{
 		out.push_back(s);
@@ -64,6 +70,10 @@ void AIUpdateInterface::emotionEnterAIState(int aiState, Object *source)
 		return;
 	}
 	Object *obj = getObject();
+	if (id == AI_FACE_OBJECT_IDLE && m_machine->currentStateId() == AI_GUARD && m_guardMode == GUARDMODE_GUARD_WITHOUT_PURSUIT)
+	{
+		obj->logic().noteStop(kStopHoldGroundEmotion);
+	}
 	if (HordeContainInterface *hc = hordeOf(*obj))
 	{
 		hc->setMembersBusy(); // slot 0x13C (RW 0x876D4E)
