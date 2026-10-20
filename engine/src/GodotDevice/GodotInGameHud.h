@@ -120,7 +120,7 @@ public:
 	// the radar picture's square in window pixels (Rect2; size 0 before the movie shows it)
 	// lane PLAY-1: the window pixel of the radar that shows the SAGE point (x, y); (-1, -1) without a radar
 	Vector2 world_to_radar_pixel(const Vector2 &world) const;
-	bool create_radar_event(const Vector2 &world_xy, int type); ///< lane RADAR-1 (QA): Radar::createEvent at SAGE (x, y), 4 seconds
+	bool create_radar_event(const Vector2 &world_xy, int type, bool jump_to = false); ///< lane RADAR-1 (QA): Radar::createEvent at SAGE (x, y), 4 seconds
 	Rect2 get_radar_square() const;
 	Dictionary get_radar_state() const;                 ///< lane HUD-7: the drawn picture, clip and view box beside the click rectangle
 	Dictionary radar_probe(const Vector2 &world_xy) const; ///< lane HUD-7: the overlay cell of a world point, its alpha and drawn pixel

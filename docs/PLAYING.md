@@ -438,7 +438,7 @@ the keys are the original game's. In particular:
 | Ctrl held + click | force-attack a unit, building or the ground (also your own) | **OpenBFME only**: 2.01 has no force-attack, see [below](#force-attack) |
 | S | stop | same |
 | D / F / G | stances | same |
-| Space | jump to the last radar event | same key; it jumps to a mission script's radar ping. Other events don't feed it yet, so in a skirmish it does nothing (S-1674) |
+| Space | jump to the last radar event | same key; it jumps to a mission script's radar ping and to your [pings](#ping-wheel). Other events don't feed it yet, so in a skirmish it jumps only to your pings (S-1674) |
 | \` | open the spell book (powers) | same |
 | F12 | screenshot | same |
 | Esc | the game menu (Resume, Options, Restart; LAN: Forfeit, Exit) | same |
@@ -446,8 +446,34 @@ the keys are the original game's. In particular:
 | Ctrl+Z | free camera on / off | **OpenBFME only** (no original key uses Ctrl+Z) |
 | F11 | frame rate counter on / off | **OpenBFME only** (no original key uses F11) |
 | Alt+Enter | window / full screen | **OpenBFME only** (no original key uses Alt+Enter) |
+| Alt+G held | the [ping wheel](#ping-wheel) | **OpenBFME only** (no original key uses Alt+G; G alone is still Hold Ground); the key can be changed in Options |
 
 On a German keyboard layout, Y and Z swap as in the original.
+
+### Ping wheel
+
+The ping wheel is an OpenBFME addition, a quick way to mark a spot on the map,
+as in many newer strategy and team games. It works in skirmish games for now.
+
+1. Point at a spot on the map and hold **Alt+G**.
+2. A wheel opens under the pointer. Move the pointer towards a sector:
+   **Attack here** (up), **Reinforcements** (right), **Danger, fall back**
+   (down) or **Need help** (left). The middle is **Look here**.
+3. Let go of G. The ping appears on the ground and on the minimap, with a
+   sound. Space jumps the camera to the last ping, as it does for the
+   game's own radar events.
+
+A quick tap of Alt+G places **Look here**. A left click also places the selected
+ping; a right click or Esc closes the wheel without one. You can place three
+pings every five seconds. The pings use the game's own beacon model, minimap
+ping and beacon sound, read from your install.
+
+In Options, on the Interface tab, you can turn the wheel off or move it to J
+(a key the original game never uses) or one of the mouse's side buttons. If a
+mod binds the key itself, the mod keeps it and the wheel stays off.
+
+Pings are only shown on your own screen for now. They are not yet sent to the
+other players in a network game, so the wheel is off there.
 
 ### Force-attack
 

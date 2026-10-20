@@ -45,6 +45,8 @@
 ##     --hud7=<a,b,...>      (lane HUD-7, with --auto) scripts/hud7_player.gd: radar (the view box and a radar click), deselect (a left click on empty
 ##                           ground), sell (a structure's Sell button), upgrade (the fortress's upgrade bubble in progress), herocancel (a hero recruited, then
 ##                           cancelled by a right click); hud7-<name>.png in --screens
+##     --pingwheel=<a,b,...> (with --auto) scripts/ping_wheel_player.gd: the ping wheel (not retail) driven by input events: wheel, kinds, space, menus,
+##                           options, hash (PINGWHEEL_HASH=quiet|pings), video (frames in --screens); pingwheel-<name>.png in --screens
 ##     --autocast1=<a,...>   (lane AUTOCAST-1, with --auto) scripts/autocast1_player.gd: witchking (a right click on the Witch-king's Morgul Blade
 ##                           button turns its autocast on, the button glows, he casts it at an enemy hero by himself; off again); autocast1-<name>.png
 ##     --visual2=<a,...>     (lane VISUAL-2, with --auto) scripts/visual2_player.gd: fog (what the local player sees of the enemy in the fog: drawn
@@ -342,6 +344,8 @@ var _hud: Node
 ## lane PLAY-1: the mouse setup forced on the command line ("alternate": the right click orders, "classic": the left click orders, "": the player's setting)
 var _mouse_override := ""
 var _move_hints: Node3D
+var _pings: Node3D      # the ping wheel (not retail): scripts/ping_board.gd, the pings shown
+var _ping_wheel: CanvasLayer # scripts/ping_wheel.gd, the wheel the ping key opens
 ## lane PLAY-1: the free camera (the owner's presentation option, not retail): --free-camera or Options.ini "OpenBFMEFreeCamera = yes"
 var _free_camera_flag := false
 ## lane ZOOM-1: --zoom-out=<f> (0 = Options.ini's OpenBFMEMaxZoomOut)
@@ -365,6 +369,7 @@ var _hover1_menus := "" # lane HOVER-1: --hover1-menus=DIR
 var _hover1_menus_started := false
 var _devport8 := PackedStringArray() # lane DEVPORT-8 (scripts/devport8_player.gd: attack)
 var _hud7 := PackedStringArray() # lane HUD-7 (scripts/hud7_player.gd: radar, deselect, sell, upgrade, herocancel)
+var _pingwheel := PackedStringArray() # the ping wheel's scenarios (scripts/ping_wheel_player.gd)
 var _autocast1 := PackedStringArray() # lane AUTOCAST-1 (scripts/autocast1_player.gd: witchking)
 var _visual2 := PackedStringArray() # lane VISUAL-2 (scripts/visual2_player.gd: fog, trees, look)
 var _start_spot := -1            # lane HUD-5
@@ -775,6 +780,8 @@ func _ready() -> void:
 			_hover1_menus = arg.substr(15)
 		elif arg.begins_with("--hud7="):
 			_hud7 = arg.substr(7).split(",", false)
+		elif arg.begins_with("--pingwheel="):
+			_pingwheel = arg.substr(12).split(",", false)
 		elif arg.begins_with("--devport8="):
 			_devport8 = arg.substr(11).split(",", false)
 		elif arg.begins_with("--autocast1="):
@@ -1961,6 +1968,8 @@ func _begin_game(message: Dictionary) -> void:
 	var opts := {"progress": Callable(self, "_on_load_progress"), "test_hooks": _end or not _zoom1.is_empty() or _rules_shot > 0 or not _gamemodes.is_empty() or _uber1 > 0 or _play_script.ends_with("spell3_player.gd") or _play_script.ends_with("ownerfix1_player.gd") or _play_script.ends_with("devport7_player.gd") or _play_script.ends_with("ownerfix2_player.gd")} # lane ZOOM-1: the bars scenario hurts some units (logged)
 	if _record and _net_state.is_empty():
 		opts["record"] = _last_replay_path() # lane MP-2: every skirmish is recorded
+	if _pingwheel.has("hash"):
+		opts["hash_every_frame"] = true # the ping wheel's check: every logic frame's state hash, compared with a run without pings
 	var rep: Dictionary = _world.start_new_game(opts)
 	_report = rep
 	print("GAME load: %d ms, ok=%s" % [Time.get_ticks_msec() - started, rep.ok])
@@ -2396,6 +2405,46 @@ func _install_hud(rep: Dictionary) -> void:
 	print("GAME move hints: ", JSON.stringify(mh))
 	if not mh.ok:
 		printerr("GAME move hints: ", mh.errors)
+	_install_pings(hud)
+
+
+## the ping wheel (NOT RETAIL, an OpenBFME addition): hold the ping key (Options, Interface: OpenBFMEPingKey) for the wheel, let go on a sector
+## for a ping on the map, the minimap and a sound (scripts/ping_wheel.gd, scripts/ping_board.gd). Presentation only. Local only for now: a network game
+## gets no wheel (its allies would not see the pings; ping_board.gd names the seam a network message will use), nor does a run with no player of its own
+func _install_pings(hud: Node) -> void:
+	if not _net_state.is_empty():
+		print("GAME ping wheel: off in network games (pings are not sent to the other players yet)")
+		return
+	if _local_index < 0:
+		print("GAME ping wheel: off (no local player)")
+		return
+	_pings = load("res://scripts/ping_board.gd").new()
+	add_child(_pings)
+	_game_nodes.append(_pings)
+	var r: Dictionary = _pings.setup(hud, _world, _audio, _fs, _local_index)
+	print("GAME pings: ", JSON.stringify(r))
+	if not r.ok:
+		printerr("GAME pings: ", r.errors)
+	_ping_wheel = load("res://scripts/ping_wheel.gd").new()
+	_ping_wheel.board = _pings
+	_ping_wheel.pick = hud.pixel_to_world
+	_ping_wheel.can_open = _ping_wheel_allowed
+	_ping_wheel.commandmap = hud.get_command_map()
+	if _shell != null:
+		_ping_wheel.font = _shell.shell_font("Albertus MT", 24).get("font")
+	add_child(_ping_wheel) # after the HUD: the wheel sees the ping key first
+	_game_nodes.append(_ping_wheel)
+	var values: Dictionary = _game_options.current() if _game_options != null else load("res://scripts/game_options.gd").defaults()
+	_ping_wheel.configure(values.OpenBFMEPingWheel == "yes", values.OpenBFMEPingKey)
+
+
+## the wheel opens only over the running game: no menu (the quit menu, Options, a save screen, the tribute screen, the powers screen) has the input
+func _ping_wheel_allowed() -> bool:
+	if _state != State.PLAYING or _quit_open or _shell == null or _shell.modal_menu():
+		return false
+	if _display_screen != null and _display_screen.is_open():
+		return false
+	return _hud == null or not _hud.get_spellbook_state().get("store", {}).get("open", false)
 
 
 ## lane PLAY-1: which button orders. TARGET FACTS (RotWK game.dat, caveat S-001): GlobalData's constructor sets m_useAlternateMouse (+ 0x5C) to 1 (RW 0x642A4B:
@@ -2706,6 +2755,15 @@ func _run_auto() -> void:
 		var pd8 = dp8.new()
 		await pd8.run(self, _devport8)
 		get_tree().quit(0 if pd8.fail_count == 0 else 1)
+		return
+	if not _pingwheel.is_empty():
+		var pw: GDScript = load("res://scripts/ping_wheel_player.gd")
+		if pw == null or not pw.can_instantiate():
+			_fail("scripts/ping_wheel_player.gd does not load")
+			return
+		var ppw = pw.new()
+		await ppw.run(self, _pingwheel)
+		get_tree().quit(0 if ppw.fail_count == 0 else 1)
 		return
 	if not _hud7.is_empty():
 		var h7: GDScript = load("res://scripts/hud7_player.gd")

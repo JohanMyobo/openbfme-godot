@@ -35,6 +35,7 @@ SUBSET = [
     "tools/net/test_user_agents.py",
     "tools/object_oracle/test_object_oracle.py",
     "tools/opts/test_opts1_hotkeys.py",
+    "tools/opts/test_ping_wheel_keys.py",
     "tools/path/test_no_libm.py",
     "tools/path/test_path_oracle.py",
     "tools/perf3/test_render_frame_no_wait.py",
