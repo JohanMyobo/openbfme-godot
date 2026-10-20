@@ -12,4 +12,5 @@ set(OPENBFME_SIEGE1_TESTS
     tests/test_siege1_deploy.cpp
     tests/test_siege1_attack.cpp
     tests/test_siege1_demolisher.cpp
+    tests/test_notre_porte.cpp
 )
