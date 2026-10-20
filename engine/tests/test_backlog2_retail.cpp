@@ -341,12 +341,12 @@ TEST_CASE("BACKLOG2 S-950: the foundation's creation interface clears the pad an
 		logic.runLogicFrame();
 		++walked;
 	}
-	// pinned (measured, Linux / GCC): the partition gives the new tower the first triple and Boromir the second; he walks 15 frames to the cell the move
-	// state adjusted the ordered spot to
+	// pinned (measured, Linux / GCC; re-measured, Windows llvm-mingw, when the destination adjustment came to spiral around the cell, RW 0x6FA2A4): the
+	// partition gives the new tower the first triple and Boromir the second; he walks 17 frames to the cell the move state adjusted the ordered spot to
 	CHECK_FALSE(boromirFirst);
-	CHECK(walked == 15);
-	CHECK(bitsOf(boromir->getPosition()->x) == 1143119872u);
-	CHECK(bitsOf(boromir->getPosition()->y) == 1166701568u);
+	CHECK(walked == 17);
+	CHECK(bitsOf(boromir->getPosition()->x) == 1142796523u);
+	CHECK(bitsOf(boromir->getPosition()->y) == 1166661149u);
 	logic.random().enableCallLog(false);
 }
 

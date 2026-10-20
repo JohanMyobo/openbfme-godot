@@ -3675,7 +3675,6 @@ TEST_CASE("factc units: every Goblin and Angmar unit, horde and hero ability and
 			  { { "* Command_ToggleStance", "S-289" },
 				{ "GoblinArcherHorde Command_GoblinArcherPoisonArrows", "S-1997|HordeAttackNugget" },
 				{ "MordorWorker Command_Harvest", "S-1993|no effect of it is asserted" },
-				{ "WildGoblinKing Command_GoblinKingSkullTotem", "S-5147|did not fire in 300 frames" },
 				{ "WildMountainGiant Command_SpecialAbilityWildMountainGiantStomp", "S-2006|WildMountainGiantStomp: no result" },
 				{ "WildPorter Command_PorterExtinguishFire", "S-1997|PorterFireExtinguisher: no result" } });
 	factcCase("units", "FactionAngmar", unitsOf,

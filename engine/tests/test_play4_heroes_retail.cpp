@@ -406,9 +406,7 @@ TEST_CASE("play4 heroes retail: every faction's heroes, recruited from the fortr
 				const bool drogoth = hero == "Drogoth";
 				// lane BACKLOG4: 3 strikes (4 before): the hero's creation uses the teleport form (RW 0x7814CF: RW 0x696E63(pos, 0)), which idles the new
 				// hero's AI and wakes it; the fight's damage and kills are unchanged (measured with and without that call)
-				// with the formations centred on their hordes (RW 0x86C4EA) Drogoth needs 4 strikes for the same 1500 health and 20 kills (measured; the destination
-				// search's one-sided reach, S-5147, is still in this tree)
-				CHECK(ord.shots == (drogoth ? 4u : 0u));
+				CHECK(ord.shots == (drogoth ? 3u : 0u));
 				CHECK(ord.lost == (drogoth ? 1500.0f : 450.0f));
 				CHECK(ord.membersKilled == (drogoth ? 20u : 5u));
 				continue;
@@ -520,8 +518,10 @@ TEST_CASE("attack1 heroes retail: the mounted Witch-king and Mouth of Sauron, or
 	// The formations centred on their hordes (RW 0x86C4EA; measured with the Windows llvm-mingw build): the CRUSHER_LEVEL -1 heroes are blocked again, as r2
 	// describes (the Witch-king 10 frames from frame 31, one swing; the Mouth of Sauron 14 from frame 20, four swings), and neither crush run lands a
 	// CrushWeapon delivery: the Witch-king's four swings kill 19 members, the Mouth of Sauron's nine kill 9. The crusher level 1 runs stay unblocked.
-	for (const Case &c : { Case{ "FactionAngmar", "AngmarWitchking", 4u, 19u, 0.0f, { 800.0f, 112.0f }, 4u, 525.0f, 1425.0f, { { 1500.0f, 800.0f }, { 700.0f, 700.0f } }, 10, 31, 1u, 525.0f, 50.9058f, 17.1228f },
-			 Case{ "FactionMordor", "MordorMouthOfSauron", 9u, 9u, 0.0f, { 640.0f, 320.0f }, 9u, 75.0f, 675.0f, { { 1500.0f, 640.0f }, { 860.0f, 640.0f }, { 220.0f, 220.0f } }, 14, 20, 4u, 300.0f, 59.5001f, 36.1168f } })
+	// The destination adjustment spiralling around the cell (RW 0x6FA2A4; the same build): the Witch-king's five swings kill all 20 members (blocked with
+	// CRUSHER_LEVEL -1 for 11 frames from frame 13), the Mouth of Sauron's run crushes two again (150) before his seven swings (blocked 15 frames from frame 20).
+	for (const Case &c : { Case{ "FactionAngmar", "AngmarWitchking", 5u, 20u, 0.0f, { 800.0f, 112.0f }, 5u, 525.0f, 1500.0f, { { 1500.0f, 800.0f }, { 700.0f, 700.0f } }, 11, 13, 1u, 525.0f, 60.9063f, 1.65727f },
+			 Case{ "FactionMordor", "MordorMouthOfSauron", 11u, 11u, 150.0f, { 640.0f, 320.0f }, 7u, 75.0f, 525.0f, { { 1500.0f, 640.0f }, { 860.0f, 640.0f }, { 220.0f, 220.0f } }, 15, 20, 4u, 300.0f, 59.5001f, 15.1928f } })
 	{
 		INFO(std::string(c.hero));
 		const ThingTemplate *tt = s->world->things().findTemplate(c.hero);

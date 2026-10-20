@@ -351,7 +351,6 @@ TEST_CASE("move3 retail: two allied hordes sent to one point (FB-0006)")
 			print(what, st);
 			std::printf("  info:   at the end: allied overlap %.2f (%s)\n", last.allyOverlap, last.worstAllyPair.c_str());
 			const std::string name(t);
-			CHECK(raised(ar.ai->pathfinder().stops(), "S-5147 ")); // the second horde's destination search ran (stop S-5147)
 			// measured in RotWK 2.01 (stop S-1832, closed): the first horde takes the point's cell, the second the cell one formation length on (its
 			// destination search, RW 0x6FE456 / 0x6FA2A4, rejects every cell around the point whose box, RW 0x6F1584, meets the first's member goals at its
 			// centred slots, RW 0x86C4EA); the goal cells, not the members, which settle about them
@@ -361,9 +360,7 @@ TEST_CASE("move3 retail: two allied hordes sent to one point (FB-0006)")
 				float dx;
 			};
 			static const Measured kRotWK[] = { { "GondorArcherHorde", 60.0f }, { "GondorFighterHorde", 60.0f }, { "ElvenLorienArcherHorde", 50.0f },
-				{ "DwarvenAxeThrowerHorde", 50.0f }, { "ElvenMirkwoodArcherHorde", 40.0f },
-				// stop S-5147: RotWK's second Angmar horde takes the cell 40 west; the destination search here reaches one cell toward -x, so it goes 50 east
-				{ "AngmarDarkRangerHorde", 50.0f } };
+				{ "DwarvenAxeThrowerHorde", 50.0f }, { "ElvenMirkwoodArcherHorde", 40.0f }, { "AngmarDarkRangerHorde", -40.0f } };
 			const Measured *m = nullptr;
 			for (const Measured &k : kRotWK)
 			{

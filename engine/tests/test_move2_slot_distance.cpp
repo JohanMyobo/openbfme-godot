@@ -428,8 +428,9 @@ TEST_CASE("move2 retail: horde members stay near their slots on the march, settl
 			{
 				// S-1834 (lane MOVE-3 r3): with RotWK's 3 x 3 line test for a horde (RW 0x6EE12D) the horde's path cuts a corner of the harlindon route; two
 				// uruks fall about 100 behind their slots there and follow at the horde's speed (no catch-up rule found); 62 frames, measured; 65 after the IDLE-1
-				// merge (members step before their horde's member pass, RW 0x851E97 / 0x490AC4); 66 with the formations centred on their hordes (RW 0x86C4EA)
-				CHECK(r.straggleFrames == 66);
+				// merge (members step before their horde's member pass, RW 0x851E97 / 0x490AC4); 66 with the formations centred on their hordes (RW 0x86C4EA),
+				// 68 with the destination adjustment spiralling around the cell (RW 0x6FA2A4)
+				CHECK(r.straggleFrames == 68);
 			}
 			else
 			{
