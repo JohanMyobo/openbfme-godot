@@ -38,11 +38,13 @@ const EXTRAS := {
 	# lane ZOOM-1: the Max zoom-out, times retail's highest camera (TacticalCamera::setZoomOutFactor). The owner's default is 2.5 (2026-10-10: "by default
 	# have the option to zoom out like 2.5x as far"), the one extra whose default is not retail's behaviour; "1" is the original game
 	"OpenBFMEMaxZoomOut": {"default": "2.5", "choices": ["1", "1.5", "2", "2.5", "3"]},
-	"OpenBFMEEdgeScroll": {"default": "retail", "choices": ["retail", "always", "off"]},
+	# notre version : le jeu tourne en fenêtre sur Mac, où « retail » (plein écran seulement) ne défile jamais par les bords
+	"OpenBFMEEdgeScroll": {"default": "always", "choices": ["retail", "always", "off"]},
 	# lane UI-6 (FB-0021, the owner's decision 2026-10-11): the Widescreen view. "original" is RotWK's Vert- view (a 50 degree horizontal angle at every
 	# aspect, RW 0x4874A7 / 0x533630); "wider" keeps 4:3's vertical view and widens the horizontal one on wider screens (TacticalCamera::setWidescreenView)
 	"OpenBFMEWidescreen": {"default": "original", "choices": ["original", "wider"]},
-	"OpenBFMEConfineMouse": {"default": "no", "choices": ["yes", "no"]},
+	# notre version : la souris reste dans la fenêtre en partie, sinon elle sort avant d'atteindre le bord qui fait défiler
+	"OpenBFMEConfineMouse": {"default": "yes", "choices": ["yes", "no"]},
 	"OpenBFMEInvertDragScroll": {"default": "no", "choices": ["yes", "no"]},
 	"OpenBFMERotateSpeed": {"default": "100", "choices": ["50", "75", "100", "150", "200"]},
 	"OpenBFMEHealthBars": {"default": "retail", "choices": ["retail", "damaged", "always"]},
