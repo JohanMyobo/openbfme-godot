@@ -402,4 +402,35 @@ TEST_CASE("hero hud: custom hero recruitment uses the selected Shield Maiden ima
 		}
 	}
 	CHECK(sawHero);
+	// A mod-defined template with the same kind must select the subclass too.
+	auto &things = h.rig.game->logic().things();
+	const ThingTemplate *original = things.findTemplate("CreateAHero");
+	REQUIRE(original);
+	ThingTemplate *mod = things.newTemplate("ModShieldHero");
+	mod->copyFrom(original);
+	int heroIndex = -1;
+	for (size_t i = 0; i < h.rig.local->heroes().size(); ++i)
+		if (h.rig.local->heroes().at((int)i)->templateName == "CreateAHero") heroIndex = (int)i;
+	REQUIRE(heroIndex != -1);
+	// A mod also lists its custom template in the faction's buildable heroes.
+	PlayerTemplate *faction = const_cast<PlayerTemplate *>(h.rig.local->getPlayerTemplate());
+	REQUIRE(faction);
+	struct RestoreHeroes
+	{
+		PlayerTemplate &faction;
+		std::vector<std::string> names;
+		~RestoreHeroes() { faction.m_buildableHeroesMP = names; }
+	} restore{ *faction, faction->m_buildableHeroesMP };
+	for (std::string &name : faction->m_buildableHeroesMP)
+		if (name == "CreateAHero") name = "ModShieldHero";
+	h.rig.local->heroes().at(heroIndex)->templateName = "ModShieldHero";
+	h.frames(5);
+	bool sawModHero = false;
+	for (const ControlBarButton &button : h.buttons(GUI_COMMAND_REVIVE))
+		if (button.reviveIndex == heroIndex)
+		{
+			CHECK(button.image == "HICAHShieldMaiden");
+			sawModHero = true;
+		}
+	CHECK(sawModHero);
 }
