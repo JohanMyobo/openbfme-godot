@@ -11,7 +11,6 @@
 #include "GameLogic/Module/StructureModules.h"
 #include "GameLogic/Module/GateModules.h"
 #include "GameLogic/Object/ObjectGeometry.h"
-#include "GameLogic/Object/PartitionManager.h"
 
 #include "Common/StateHash.h"
 #include "Common/Thing/ModuleFactory.h"
@@ -254,22 +253,53 @@ bool segmentHitsBox(const Coord3D &a, const Coord3D &b, const float lo[3], const
 	return true;
 }
 
+// les portes de la partie (BLOCKING_GATE vivantes), relevées une fois par frame logique plutôt qu'une requête de partition par projectile
+std::vector<ObjectID> gatesOfFrame(GameLogic &logic, int kBlockingGate)
+{
+	static std::mutex lock;
+	static const GameLogic *cachedLogic = nullptr;
+	static unsigned cachedFrame = 0;
+	static std::vector<ObjectID> cached;
+	std::lock_guard<std::mutex> guard(lock);
+	if (cachedLogic != &logic || cachedFrame != logic.getFrame())
+	{
+		cached.clear();
+		for (Object *o = logic.getFirstObject(); o; o = o->getNextObject())
+		{
+			if (o->isKindOf((unsigned)kBlockingGate) && !o->isEffectivelyDead())
+			{
+				cached.push_back(o->getID());
+			}
+		}
+		cachedLogic = &logic;
+		cachedFrame = logic.getFrame();
+	}
+	return cached;
+}
+
 // la porte fermée que le segment from -> to traverse (ni la cible visée, ni une porte au-dessus de laquelle se tient le tireur), sinon null
 Object *closedGateCrossed(GameLogic &logic, const Coord3D &from, const Coord3D &to, ObjectID victimID, const Object *launcher)
 {
 	static const int kBlockingGate = CombatNames::kindOf("BLOCKING_GATE");
-	if (kBlockingGate < 0)
+	const std::vector<ObjectID> gates = gatesOfFrame(logic, kBlockingGate);
+	if (gates.empty())
 	{
 		return nullptr;
 	}
-	const Coord3D mid{ SimMath::mulf32(SimMath::addf32(from.x, to.x), 0.5f), SimMath::mulf32(SimMath::addf32(from.y, to.y), 0.5f), 0.0f };
+	const float mx = SimMath::mulf32(SimMath::addf32(from.x, to.x), 0.5f), my = SimMath::mulf32(SimMath::addf32(from.y, to.y), 0.5f);
 	const float hx = SimMath::subf32(to.x, from.x), hy = SimMath::subf32(to.y, from.y);
-	const float halfLen = SimMath::mulf32(SimMath::fstpDword(SimMath::sqrtPC24((double)SimMath::addf32(SimMath::mulf32(hx, hx), SimMath::mulf32(hy, hy)))), 0.5f);
-	PartitionFilterFn gates([](Object &o) { return o.isKindOf((unsigned)kBlockingGate) && !o.isEffectivelyDead(); });
-	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(mid, SimMath::addf32(halfLen, 80.0f), FROM_CENTER_2D, { &gates }, ITER_FASTEST))
+	// le rayon de recherche : la moitié du segment plus 80 (la demi-largeur des portes de RotWK : 58,4 pour Minas Tirith), comparé au carré
+	const float reach = SimMath::addf32(SimMath::mulf32(SimMath::fstpDword(SimMath::sqrtPC24((double)SimMath::addf32(SimMath::mulf32(hx, hx), SimMath::mulf32(hy, hy)))), 0.5f), 80.0f);
+	const float reachSq = SimMath::mulf32(reach, reach);
+	for (ObjectID id : gates)
 	{
-		Object *gate = h.object;
-		if (!gate || gate->getID() == victimID || !gate->getTemplate())
+		Object *gate = logic.findObjectByID(id);
+		if (!gate || id == victimID || !gate->getTemplate() || !gate->isKindOf((unsigned)kBlockingGate) || gate->isEffectivelyDead())
+		{
+			continue;
+		}
+		const float gx = SimMath::subf32(gate->getPosition()->x, mx), gy = SimMath::subf32(gate->getPosition()->y, my);
+		if (SimMath::addf32(SimMath::mulf32(gx, gx), SimMath::mulf32(gy, gy)) > reachSq)
 		{
 			continue;
 		}
