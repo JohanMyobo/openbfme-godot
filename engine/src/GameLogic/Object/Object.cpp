@@ -1915,6 +1915,7 @@ void Object::scoreTheKill(Object &victim, int scoreType)
 		return;
 	}
 	victim.m_scored = true;
+	if (killer->isKindOfName("CREATE_A_HERO") && m_logic.clientHooks()) m_logic.clientHooks()->createAHeroKill(*killer, victim);
 	if (scoreType != 1 && scoreType != 2)
 	{
 		return;

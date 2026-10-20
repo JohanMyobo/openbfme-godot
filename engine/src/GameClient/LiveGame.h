@@ -47,6 +47,8 @@
 #include "GameLogic/PlayerCommands.h"
 #include "GameLogic/Object/RetailObjectWorld.h"
 
+#include "GameClient/CreateAHeroStats.h"
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -71,6 +73,8 @@ class LiveGame
 public:
 	struct Options
 	{
+		std::string heroStatsProfile; // client profile only, supplied by the hero manager
+		std::function<void(const std::string &)> heroStatsMessage;
 		std::string mapName;               ///< "map mp evendim": the map's directory / file stem
 		SkirmishSetup slots;               ///< lobby slots taken over by the map's players (empty: the map's own players)
 		std::uint32_t seed = 1;            ///< the logic RNG seed
@@ -377,6 +381,13 @@ private:
 	LogicFrameClock m_tickClock{ LOGICFRAMES_PER_SECOND * 6 }; ///< the engine tick clock of six tick pacing
 	int m_nextPhase = 1;                                       ///< six tick pacing: the phase the next tick runs
 	Options m_options;
+	CreateAHeroStats m_heroStatistics;
+	std::string m_cahHeroID;
+	int m_cahMode = -1;
+	bool m_cahResultRecorded = false;
+	std::vector<std::string> m_cahEarned;
+	void consumeHeroStatistics(const std::vector<ClientEvent> &events, const LogicSnapshot *snapshot);
+
 	Report m_report;
 	std::vector<std::string> m_economyStops; ///< the terrain source's stop lines of the economy's blocked-cell map (lane ECON-1)
 	bool m_renderInterpolation = true;

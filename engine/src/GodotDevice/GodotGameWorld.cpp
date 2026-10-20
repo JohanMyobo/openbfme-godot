@@ -1074,6 +1074,8 @@ Dictionary GameWorld::load_internal(const LiveGame::Options &loIn, const String 
 	m_textureAnimation = optBool(options, "texture_animation", true);
 
 	LiveGame::Options lo = loIn;
+	lo.heroStatsProfile = m_heroStatsProfile;
+	lo.heroStatsMessage = [](const std::string &message) { UtilityFunctions::print(toGodot(message)); };
 	if (progress.is_valid())
 	{
 		lo.progress = [&progress](int percent) { progress.call(percent); };
