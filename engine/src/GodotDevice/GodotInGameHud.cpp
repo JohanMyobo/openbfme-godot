@@ -317,7 +317,7 @@ struct HudDevice : public AptNativeHook
 	DecalImage decalImageFor(const std::string &file);
 	void drawSelectionDecals();
 	void freeSelectionDecals();
-	// SPELL-4: the radius cursor is composited by the terrain before its baked-light split.
+	// SPELL-4: the radius cursor is composited by the terrain alongside selection decals.
 	bool radiusCursorBound = false;
 	bool radiusDecalDrawn = false;
 	std::string radiusDecalError; ///< the texture of the cursor that could not be read (also in the HUD's draw errors)
@@ -1339,9 +1339,9 @@ void HudDevice::drawRadiusCursor()
 		radiusDecalError = "radius cursor " + rc.type + ": no texture " + rc.texture;
 		return;
 	}
-	// Godot's albedo-only Decal is invisible on the terrain's emission-based
-	// baked lighting when shadow strength is zero. Composite the same texture
-	// and opacity before that split, as the selection's merge decals do.
+	// Composite the texture and opacity with the terrain, as the selection's
+	// merge decals do. This also supports unshaded terrain, where a Godot
+	// albedo-only Decal cannot supply a visible radius preview.
 	// S-4640: this remains the port's terrain projection, not retail's stencil pass.
 	rs->global_shader_parameter_set("radius_cursor_texture", dt->albedo->get_rid());
 	rs->global_shader_parameter_set("radius_cursor_params", Vector4(alphaStyle ? rc.opacity / 255.0f : 1.0f, alphaStyle ? 1.0f : 0.0f, 0.0f, 0.0f));
