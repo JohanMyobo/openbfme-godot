@@ -8,6 +8,8 @@
 #include "GameClient/GUI/ShellServices.h"
 #include "GameClient/InGameHud.h"
 #include "GameClient/PalantirCommandUI.h"
+#include "GameClient/InGameHeroSelect.h"
+#include "Common/ModelState.h"
 #include "Libraries/Source/Apt/AptCharacterInst.h"
 #include "Libraries/Source/Apt/AptRenderList.h"
 
@@ -231,4 +233,20 @@ TEST_CASE("stop S-760: the Palantir portrait reports the branches it does not po
 	const std::vector<std::string> stops = PalantirCommandUI::acceptanceStops();
 	REQUIRE(stops.size() == 1);
 	CHECK(stops[0].rfind("[S-760]", 0) == 0);
+}
+
+TEST_CASE("hud2 custom hero buttons: model-state icons distinguish Shield Maiden and Captain")
+{
+	if (!haveWorld("hud2 custom hero button")) return;
+	PalantirRig h(shared());
+	Object *maiden = h.rig.make("CreateAHero", 2800, 1400);
+	Object *captain = h.rig.make("CreateAHero", 3000, 1400);
+	REQUIRE(maiden);
+	REQUIRE(captain);
+	maiden->setModelConditionState(ModelCondition::indexOf("CREATE_A_HERO_02"), true);
+	captain->setModelConditionState(ModelCondition::indexOf("CREATE_A_HERO_00"), true);
+	CHECK(InGameHeroSelect::buttonImage(*maiden) == "HICAHShieldMaiden");
+	CHECK(InGameHeroSelect::buttonImage(*captain) == "HICAHCaptainGondor");
+	maiden->setModelConditionState(ModelCondition::indexOf("MOUNTED"), true);
+	CHECK(InGameHeroSelect::buttonImage(*maiden) == "HICAHShieldMaiden");
 }
