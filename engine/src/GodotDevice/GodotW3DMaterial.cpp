@@ -304,6 +304,41 @@ Ref<Texture2D> W3DMaterialFactory::Load_Texture(const std::string &name, std::ve
 {
 	found = false;
 	TextureResolution res = Resolve_W3D_Texture(name, [&](const std::string &p) { return Fs.doesFileExist(p); }, isBfme1Data(Fs)); // community PR #36: the archives' layout
+	if (!res.Found && !isBfme1Data(Fs))
+	{
+		// notre version : quelques modèles de RotWK (les bâtiments GBGen41 / GBGen62 de Minas Tirith : GBGen01.tga) nomment une texture que l'installation
+		// ne range qu'empaquetée, art\compiledtextures\xx\<nom>.jpg avec son .png ; on la charge comme le chargeur des textures empaquetées (RW 0x530D29)
+		std::string stem = AsciiStringUtil::lowered(name);
+		const size_t dot = stem.find_last_of('.');
+		if (dot != std::string::npos) stem.resize(dot);
+		if (stem.size() > 2)
+		{
+			const std::string packed = "art\\compiledtextures\\" + stem.substr(0, 2) + "\\" + stem;
+			const int reductionPacked = g_textureReduction;
+			const std::string key = "#packed#" + packed + (reductionPacked > 0 ? "#reduction" + std::to_string(reductionPacked) : std::string());
+			auto cached = Textures.find(key);
+			if (cached != Textures.end())
+			{
+				found = true;
+				return cached->second;
+			}
+			if (Fs.doesFileExist(packed + ".jpg"))
+			{
+				AptArchiveFileSource source(Fs);
+				bool paired = false;
+				Ref<Image> image = loadPackedTexture(source, packed, &paired);
+				if (image.is_valid() && !image->is_empty())
+				{
+					if (!image->has_mipmaps() && !image->is_compressed()) image->generate_mipmaps();
+					Reduce_Image(image, reductionPacked);
+					Ref<ImageTexture> tex = ImageTexture::create_from_image(image);
+					Textures[key] = tex;
+					found = true;
+					return tex;
+				}
+			}
+		}
+	}
 	if (!res.Found)
 	{
 		if (!quietWhenMissing)
