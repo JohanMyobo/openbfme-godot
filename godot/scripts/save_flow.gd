@@ -36,6 +36,10 @@ func _init(g: Node) -> void:
 
 func save_dir() -> String:
 	var dir: String = game._save_dir_arg
+	if dir.is_empty() and game._fs.is_bfme1():
+		# notre version : BFME1 n'a pas le gi.dat de RotWK ; son dossier est <application data>\My Battle for Middle-earth Files\Save\ (sans dossier,
+		# l'écran de sauvegarde restait bloqué)
+		dir = OS.get_data_dir().path_join("My Battle for Middle-earth Files").path_join("Save")
 	if dir.is_empty():
 		# retail: <application data>\<gi.dat UserDataLeafName>\Save\ (RW 0x6DE38D's folder; lane CAH-2's UserDataFolder)
 		var r: Dictionary = game._shell.create_a_hero_save_folder(game._rotwk_install)
