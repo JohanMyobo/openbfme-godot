@@ -8,6 +8,7 @@
 #include "Common/ArchiveFile.h"
 #include "Common/MD5.h"
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <chrono>
 #include <godot_cpp/classes/config_file.hpp>
@@ -192,13 +193,22 @@ Dictionary RetailFileSystem::mount_bfme1_path(const String &root)
 	// all existing UI readers see the selected language consistently.
 	if (errors.is_empty())
 	{
+		// notre version : une installation française (lang/french) se lit comme l'anglaise, la langue est celle du seul dossier lang/<langue>
+		// installé, comme GameTextTable::loadRetail choisit lotr.csf
+		std::string languageDir = "lang/english/";
+		if (!fs->doesFileExist(languageDir + "headertemplate.ini"))
+		{
+			FilenameList found;
+			fs->getFileListInDirectory("lang", "", "headertemplate.ini", found, true);
+			if (found.size() == 1) languageDir = found.begin()->substr(0, found.begin()->size() - std::strlen("headertemplate.ini"));
+		}
 		std::vector<std::pair<std::string, std::vector<std::uint8_t>>> languageFiles;
 		for (const char *name : {"headertemplate.ini", "language.ini"})
 		{
 			if (fs->doesFileExist(name)) continue;
 			std::vector<std::uint8_t> bytes;
 			std::string error;
-			if (!fs->readFile(std::string("lang/english/") + name, bytes, &error)) { errors.push_back(toGodot(error)); break; }
+			if (!fs->readFile(languageDir + name, bytes, &error)) { errors.push_back(toGodot(error)); break; }
 			languageFiles.emplace_back(name, std::move(bytes));
 		}
 		if (!languageFiles.empty() && errors.is_empty())

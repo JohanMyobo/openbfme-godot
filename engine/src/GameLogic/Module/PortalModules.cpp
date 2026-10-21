@@ -25,9 +25,11 @@
 #include "GameLogic/Object/ObjectGeometry.h"
 #include "GameLogic/ObjectFilter.h"
 #include "GameLogic/ObjectFilterMatch.h"
+#include "GameLogic/ObjectTemplateInfo.h"
 #include "GameLogic/SimMath.h"
 #include "GameLogic/SkirmishAI/SkirmishAIManager.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <memory>
@@ -95,7 +97,33 @@ void parseFilter(INI *ini, void *instance, void *store, const void *userData)
 	*static_cast<std::shared_ptr<const ObjectFilter> *>(store) = std::make_shared<const ObjectFilter>(std::move(f));
 }
 
+// notre version (docs/BFME1.md) : BFME1 écrit le filtre du portail en deux lignes, AllowKindOf et RejectKindOf (userData non nul). INFÉRENCE : elles
+// font le filtre de RotWK `ObjectFilter = ANY +<permis> -<refusés>` (ALL -<refusés> sans AllowKindOf)
+void parseBfme1PortalKindOf(INI *ini, void *, void *store, const void *reject)
+{
+	auto &slot = *static_cast<std::shared_ptr<const ObjectFilter> *>(store);
+	ObjectFilter f = slot ? *slot : ObjectFilter::parserDefault();
+	for (const char *t = ini->getNextTokenOrNull(); t; t = ini->getNextTokenOrNull())
+	{
+		const int idx = ObjectTemplateInfoBuilder::kindOfIndex(t);
+		if (idx < 0)
+		{
+			throw INIException(3, "DynamicPortalBehaviour: unknown KindOf %s", t);
+		}
+		BitFlagsSet(reject ? f.excludeKindOf : f.includeKindOf, (size_t)idx);
+	}
+	const bool anyAllowed = std::any_of(f.includeKindOf.begin(), f.includeKindOf.end(), [](std::uint32_t w) { return w != 0; });
+	f.rule = anyAllowed ? ObjectFilter::RULE_ANY : ObjectFilter::RULE_ALL;
+	f.flag = true;
+	slot = std::make_shared<const ObjectFilter>(std::move(f));
+}
+
 #define DP_OFF(m) (int)offsetof(DynamicPortalBehaviourModuleData, m)
+const FieldParse kBfme1DynamicPortal[] = {
+	{ "AllowKindOf", parseBfme1PortalKindOf, nullptr, DP_OFF(m_objectFilter) },
+	{ "RejectKindOf", parseBfme1PortalKindOf, "reject", DP_OFF(m_objectFilter) },
+	{ nullptr, nullptr, nullptr, 0 }
+};
 const FieldParse kDynamicPortal[] = { // RW 0xC59220
 	{ "BonePrefix", INI::parseAsciiString, nullptr, DP_OFF(m_bonePrefix) },
 	{ "NumberOfBones", INI::parseInt, nullptr, DP_OFF(m_numberOfBones) },
@@ -111,6 +139,7 @@ const FieldParse kDynamicPortal[] = { // RW 0xC59220
 	{ "ObjectFilter", parseFilter, nullptr, DP_OFF(m_objectFilter) },
 	{ nullptr, nullptr, nullptr, 0 }
 };
+const Bfme1FieldRowsRegistration kBfme1DynamicPortalRows(kDynamicPortal, kBfme1DynamicPortal);
 #undef DP_OFF
 
 #define FP_OFF(m) (int)offsetof(FakePathfindPortalBehaviourModuleData, m)

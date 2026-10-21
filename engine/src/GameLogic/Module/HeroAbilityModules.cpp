@@ -1037,6 +1037,12 @@ const FieldParse kWeaponModeBase[] = { // RW 0xC87588
 	{ "StartsPaused", INI::parseBool, nullptr, WM_OFF(m_startsPaused) },
 	{ nullptr, nullptr, nullptr, 0 },
 };
+// notre version (docs/BFME1.md) : la ligne InitiateSound2 de BFME1, comme kBfme1SpecialPowerModule ; la table de RotWK reste celle du binaire
+const FieldParse kBfme1WeaponModeBase[] = {
+	{ "InitiateSound2", parseNextName, nullptr, WM_OFF(m_initiateSound2) },
+	{ nullptr, nullptr, nullptr, 0 },
+};
+const Bfme1FieldRowsRegistration kBfme1WeaponModeBaseRegistration(kWeaponModeBase, kBfme1WeaponModeBase);
 const FieldParse kWeaponMode[] = { // RW 0xC650A0
 	{ "Duration", INI::parseDurationUnsignedInt, nullptr, WM_OFF(m_duration) },
 	{ "AttributeModifier", INI::parseAsciiString, nullptr, WM_OFF(m_attributeModifier) },

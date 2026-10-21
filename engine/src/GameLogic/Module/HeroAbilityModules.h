@@ -325,6 +325,7 @@ public:
 	std::string m_initiateSound;      // + 0x0C
 	bool m_startsPaused = false;      // + 0x14
 	std::string m_attributeModifier;  // + 0x18
+	std::string m_initiateSound2;     // notre version : la ligne InitiateSound2 de BFME1 (gardée, pas jouée)
 	unsigned m_duration = 0;          // + 0x1C (frames)
 	int m_lockWeaponSlot = 5;         // + 0x20
 	std::array<std::uint32_t, 4> m_weaponSetFlags{}; // + 0x24

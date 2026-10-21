@@ -39,6 +39,12 @@ const FieldParse kBloodthirstyUpdate[] = {
 	{ "InitiateVoice", INI::parseAsciiString, nullptr, (int)offsetof(BloodthirstyUpdateModuleData, m_initiateVoice) },
 	{ nullptr, nullptr, nullptr, 0 }
 };
+const FieldParse kBfme1BloodthirstyUpdate[] = {
+	{ "NumToSacrifice", INI::parseInt, nullptr, (int)offsetof(BloodthirstyUpdateModuleData, m_bfme1NumToSacrifice) },
+	{ "InitiateVoice2", INI::parseAsciiString, nullptr, (int)offsetof(BloodthirstyUpdateModuleData, m_bfme1InitiateVoice2) },
+	{ nullptr, nullptr, nullptr, 0 }
+};
+const Bfme1FieldRowsRegistration kBfme1BloodthirstyRows(kBloodthirstyUpdate, kBfme1BloodthirstyUpdate);
 
 unsigned statusIndex(const char *name)
 {

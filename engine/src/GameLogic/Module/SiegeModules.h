@@ -162,6 +162,7 @@ public:
 	std::string m_specialPowerTemplateName;
 	std::string m_initiateSound;      // + 0x0C (client)
 	bool m_startsPaused = false;      // + 0x14
+	std::string m_initiateSound2;     // notre version : la ligne InitiateSound2 de BFME1 (gardée, pas jouée)
 	static void buildFieldParse(MultiIniFieldParse &p); // RW 0x9911B3
 };
 
