@@ -405,6 +405,7 @@ TEST_CASE("move retail: every ground unit and horde template of the install, ord
 	REQUIRE(units.size() > 650);
 	size_t moved = 0, still = 0, unported = 0, hordes = 0, hordesChecked = 0, lifetimeLimited = 0, knocked = 0;
 	std::vector<std::string> knockedNames;
+	std::vector<std::string> wanderNames;
 	std::vector<std::string> lifetimeNames;
 	std::vector<std::string> unexplained, badHordes, ridersWithoutSlots;
 	for (size_t b = 0; b < units.size(); b += 42)
@@ -438,6 +439,12 @@ TEST_CASE("move retail: every ground unit and horde template of the install, ord
 				// not cover abilities. A unit lying stunned does not walk (RW 0x5E3A1B): not a movement failure
 				++knocked;
 				knockedNames.push_back(r.name);
+			}
+			else if (r.name == "NeutralGollum_RingHero")
+			{
+				// notre version : Gollum porteur de l'Anneau (AnimalAIUpdate, WanderPercentage 80, PR #68) marche jusqu'au point puis repart errer dès qu'il est
+				// inactif : il n'est jamais « arrivé et immobile » à la fin du balayage (test_notre_gollum.cpp vérifie qu'il atteint le point)
+				wanderNames.push_back(r.name);
 			}
 			else if (g.ai->movementFailures().count(r.name + ": S-084: ZAxisBehavior other than NO_Z_MOTIVE_FORCE, FLOATING_Z, SEA_LEVEL, SURFACE_RELATIVE_HEIGHT, ABSOLUTE_HEIGHT and SCALING_WALLS is not ported") != 0)
 			{
@@ -477,7 +484,7 @@ TEST_CASE("move retail: every ground unit and horde template of the install, ord
 	CHECK(ridersWithoutSlots[1].rfind("MordorHaradrimArcherHordeOnMumakil", 0) == 0);
 	// the pinned totals of this install: 710 templates; the ones that do not walk are still by data
 	CHECK(units.size() == 710);
-	CHECK(moved + still + unported + lifetimeLimited + knocked + unexplained.size() == units.size());
+	CHECK(moved + still + unported + lifetimeLimited + knocked + wanderNames.size() + unexplained.size() == units.size());
 	{
 		std::string joined;
 		for (const std::string &n : knockedNames)
