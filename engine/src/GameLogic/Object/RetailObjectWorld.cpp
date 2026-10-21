@@ -438,6 +438,21 @@ bool RetailObjectWorld::loadState(std::string *error)
 		fe.message = e.what();
 		m_s->m_report.errors.push_back(fe);
 	}
+	// notre version : la légende de RotWK ne charge que LinearCampaignExpansion1.ini (Angmar) ; on charge aussi Data\INI\LinearCampaign.ini, les
+	// campagnes du Bien et du Mal de BFME2 (GOOD_CAMPAIGN, EVIL_CAMPAIGN), que le jeu RotWK d'origine ne propose pas
+	if (!options.bfme1) try
+	{
+		INI campaignsIni(m_s->m_env);
+		campaignsIni.load("Data\\INI\\LinearCampaign.ini", INI_LOAD_OVERWRITE);
+	}
+	catch (const INIException &e)
+	{
+		SubsystemLoadReport::FileError fe;
+		fe.file = "Data\\INI\\LinearCampaign.ini";
+		fe.code = e.code();
+		fe.message = e.what();
+		m_s->m_report.errors.push_back(fe);
+	}
 	// PROD-1: the ControlBar loads its own three files after the objects (RW 0x71CE3A); its errors reach the report like the legend's
 	std::vector<std::string> commandErrors;
 	m_s->m_commands.loadFromFiles(m_s->m_env, &commandErrors);

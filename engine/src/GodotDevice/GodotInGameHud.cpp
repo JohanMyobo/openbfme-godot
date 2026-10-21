@@ -2920,9 +2920,8 @@ void InGameHudNode::_process(double delta)
 			const Vector2 size = get_viewport_rect().size;
 			const float width = std::min(420.0f, (float)size.x * 0.4f);
 			const Rect2 rect(size.x - width - 24.0f, std::max(24.0f, (float)size.y - 370.0f), width, 300.0f);
-			if (d->hud->helpBox().isShown())
-				RenderingServer::get_singleton()->canvas_item_add_rect(get_canvas_item(), rect.grow(10), Color(0.06f, 0.05f, 0.03f, 0.95f));
-			d->hud6->drawHelp(rect, get_canvas_item());
+			// notre version : le fond suit la hauteur du texte (il couvrait toujours 300 pixels)
+			d->hud6->drawHelp(rect, get_canvas_item(), d->hud->helpBox().isShown() ? Color(0.06f, 0.05f, 0.03f, 0.95f) : Color(0, 0, 0, 0));
 		}
 
 	}

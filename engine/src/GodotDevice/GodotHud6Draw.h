@@ -40,7 +40,8 @@ public:
 	FontMetricsSource *metrics() { return m_metrics.get(); }
 	// the help box's content clip: its `_type` is the help box's render name (InGameHelpBox::renderName)
 	bool handles(const std::string &symbolName) const;
-	void drawHelp(const Rect2 &rect, RID item);
+	// notre version : `background` (alpha > 0) est d'abord peint sous le texte, à la taille de ce qui est dessiné (le panneau natif de BFME1)
+	void drawHelp(const Rect2 &rect, RID item, const Color &background = Color(0, 0, 0, 0));
 	// the ring, under the Palantir movie (after the drawable decorations)
 	void drawRadial(RID parent);
 	// { radial: { object, count, radius, centre, buttons: [{ slot, rect, state, hilited }] }, help: { state, shown, name, width, calls } }

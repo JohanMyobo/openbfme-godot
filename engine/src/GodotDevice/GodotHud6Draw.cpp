@@ -18,6 +18,7 @@
 #include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 
+#include <algorithm>
 #include <cmath>
 
 namespace godot
@@ -144,12 +145,33 @@ bool Hud6Draw::region(const std::string &image, Ref<ImageTexture> &tex, Rect2 &s
 	return true;
 }
 
-void Hud6Draw::drawHelp(const Rect2 &rect, RID item)
+void Hud6Draw::drawHelp(const Rect2 &rect, RID item, const Color &background)
 {
 	std::vector<HelpDrawOp> ops;
 	m_hud.helpBoxRender(rect.position.x, rect.position.y, rect.size.x, rect.size.y, ops); // RW 0x92E2AC
 	RenderingServer *rs = RenderingServer::get_singleton();
 	m_helpTextOps = 0;
+	if (background.a > 0.0f && !ops.empty())
+	{
+		// le fond s'arrête sous la dernière ligne (une ligne de texte compte la hauteur de sa police)
+		float bottom = rect.position.y;
+		for (const HelpDrawOp &op : ops)
+		{
+			float h = op.h;
+			if (op.kind == HelpDrawOp::TEXT)
+			{
+				GameFont g;
+				g.name = op.font.name;
+				g.pointSize = op.font.pointSize;
+				g.bold = op.font.bold;
+				float size = 0;
+				Ref<Font> f = static_cast<HelpFontMetrics *>(m_metrics.get())->font(g, size);
+				h = f->get_height((int)std::lround(size));
+			}
+			bottom = std::max(bottom, op.y + h);
+		}
+		rs->canvas_item_add_rect(item, Rect2(rect.position, Vector2(rect.size.x, std::min(bottom, rect.position.y + rect.size.y) - rect.position.y)).grow(10), background);
+	}
 	for (const HelpDrawOp &op : ops)
 	{
 		if (op.kind == HelpDrawOp::IMAGE)
