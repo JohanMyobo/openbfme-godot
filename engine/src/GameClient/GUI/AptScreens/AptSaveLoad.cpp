@@ -121,6 +121,8 @@ AptSaveLoad::AptSaveLoad(WindowManager &windows, Shell &shell, ShellEnvironment 
 		}
 	});
 	registerCommand("AptSaveLoad::ConfirmationOk", [this](const std::string &) { confirmationOk(); });
+	// notre version : le SaveLoad.apt de BFME1 écrit aussi « ConfrimationOk » (faute du film d'origine)
+	registerCommand("AptSaveLoad::ConfrimationOk", [this](const std::string &) { confirmationOk(); });
 	registerCommand("AptSaveLoad::ConfirmationCancel", [this](const std::string &) {
 		// bound to the same body as OnInitialized (the decomp's 0x00433DF1): the confirmation is dropped, the lists are usable again
 		m_pendingPath.clear();
@@ -506,7 +508,15 @@ void AptSaveLoad::setDefaultFileName()
 		GadgetTextEntrySetText(m_fileEntry, toU16(m_env.saveLoad->saves[(size_t)index].fileNameUtf8));
 		return;
 	}
-	const std::string pattern = loadScreenU16ToUtf8(text("GUI:DefaultSaveFileName"));
+	bool exists = false;
+	std::string pattern = loadScreenU16ToUtf8(fetchOrMissing(m_env.gameText, "GUI:DefaultSaveFileName", &exists));
+	if (!exists)
+	{
+		// notre version : BFME1 n'a pas GUI:DefaultSaveFileName ; le texte « MISSING: '…' » contient « : » et « ' », que Save refuse (la boîte
+		// d'erreur restait invisible et l'écran figé). On numérote « Sauvegarde %d »
+		windows().note("save-default-name", "GUI:DefaultSaveFileName absent : « Sauvegarde %d » (notre version, BFME1)");
+		pattern = "Sauvegarde %d";
+	}
 	const size_t at = pattern.find("%d");
 	if (at == std::string::npos)
 	{
@@ -595,12 +605,20 @@ void AptSaveLoad::showBox(const std::u16string &title, const std::u16string &bod
 			revealButton(m_boxButton);
 		}
 	});
-	if (m_box->level() < 0)
+	if (m_box->level() < 0 || m_box->showFailed())
 	{
-		// GuiFX.apt did not load (noted by the box): the screen is never left disabled
+		// GuiFX.apt did not load (noted by the box): the screen is never left disabled. Notre version : de même quand la boîte ne peut pas
+		// s'afficher (le GuiFX.apt de BFME1 n'a pas MessageBox.Show) : son Ok est joué tout de suite, une partie sauvegardée reprend
 		m_boxOpen = false;
+		if (m_closeAfterBox)
+		{
+			m_state = 10;
+			windows().requestShellPop();
+			return;
+		}
 		enableLists(true);
 		m_state = 0;
+		refreshButtons();
 	}
 }
 
