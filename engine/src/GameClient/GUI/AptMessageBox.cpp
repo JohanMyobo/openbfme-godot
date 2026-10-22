@@ -159,6 +159,7 @@ void AptMessageBox::show(Type type, const std::u16string &title, const std::u16s
 	m_windows.setAptText(records + "Text", utf8(text));
 	m_large = text.size() > 0x100; // RW 0x9539D4: the text's length > 256
 	m_pending = 2;
+	m_showFailed = false;
 	update();
 }
 
@@ -190,7 +191,8 @@ void AptMessageBox::update()
 	std::string error;
 	if (m_pending == 2)
 	{
-		if (!m_windows.invokeASAtValues(level(), m_clip, "Show", { AptValue::string(typeName(m_type)), AptValue::boolean(m_large) }, &error))
+		m_showFailed = !m_windows.invokeASAtValues(level(), m_clip, "Show", { AptValue::string(typeName(m_type)), AptValue::boolean(m_large) }, &error);
+		if (m_showFailed)
 		{
 			m_windows.note("invoke-failed", m_clip + ".Show: " + error);
 		}

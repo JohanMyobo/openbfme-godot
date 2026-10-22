@@ -74,6 +74,8 @@ public:
 	const std::vector<std::string> &trace() const { return m_trace; }
 	std::u16string title() const { return m_title; }
 	std::u16string text() const { return m_text; }
+	// notre version : le dernier show() n'a pas pu atteindre le clip (le GuiFX.apt de BFME1 n'a pas MessageBox.Show) : aucun bouton ne répondra
+	bool showFailed() const { return m_showFailed; }
 
 private:
 	void registerCommands();
@@ -87,6 +89,7 @@ private:
 	int m_pending = 0; // RW + 0x14: 0 nothing, 2 show, 3 hide
 	bool m_instant = false;
 	bool m_large = false;
+	bool m_showFailed = false;
 	ButtonFn m_onButton;
 	StateFn m_onState;
 	std::u16string m_title, m_text;
