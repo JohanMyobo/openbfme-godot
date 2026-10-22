@@ -1265,9 +1265,9 @@ bool HordeAIUpdate::meleeDestination(ObjectID member, Coord3D &out) const
 {
 	const HordeContain *hc = hordeContainOf(*const_cast<HordeAIUpdate *>(this)->getObject());
 	const MeleeBehaviorModuleData *mb = hc ? hc->meleeBehaviorData() : nullptr;
-	if (!mb || mb->m_kind != MeleeBehaviorModuleData::AMOEBA)
+	if (mb && mb->m_kind != MeleeBehaviorModuleData::AMOEBA)
 	{
-		return false; // HoldGround RW 0x8F8014 (and the unported Swarm): no destination
+		return false; // HoldGround RW 0x8F8014: no destination (notre version : Swarm, sans MeleeBehavior, a les siennes, voir swarmTick)
 	}
 	for (const MemberRecord &r : m_records)
 	{
@@ -1793,11 +1793,76 @@ void HordeAIUpdate::holdGroundTick(Object &target)
 	}
 }
 
-// RW 0x98C6A8 HordeMeleeSwarm (the default without MeleeBehavior; no 2.01 horde uses it): NOT ported (S-588). Its members only attack the enemy in reach.
+// RW 0x98C6A8 HordeMeleeSwarm (the default without MeleeBehavior; no 2.01 horde uses it): NOT ported (S-588).
+// NOTRE VERSION (pas retail) : les hordes de BFME1 n'ont aucun MeleeBehavior et passent toutes ici. Ne frapper que ce qui est déjà à portée laissait
+// les soldats plantés devant un bâtiment (la horde s'arrête à sa propre portée, celle de l'épée est plus courte, et la machine de mêlée d'un membre
+// de horde n'approche jamais seule) : un soldat à portée d'un ennemi de la cible l'attaque, les autres reçoivent comme destination de mêlée le bord
+// de l'ennemi le plus proche (la cible, ou le soldat le plus proche de la horde visée), où la passe des membres les fait marcher.
 void HordeAIUpdate::swarmTick(Object &target)
 {
 	++m_swarmTicks;
-	holdGroundTick(target);
+	const std::vector<Object *> cands = amoebaReachCandidates(target);
+	for (Object *m : membersOf())
+	{
+		AIUpdateInterface *ai = m->getAIUpdateInterface();
+		if (!ai || m->testStatus((unsigned)CombatNames::statuses().isMeleeAttacking) || m->testStatus((unsigned)CombatNames::statuses().uncontrollablyScared))
+		{
+			continue;
+		}
+		MemberRecord &rec = recordOf(m->getID());
+		if (Object *e = amoebaReachAmong(*m, cands))
+		{
+			rec.hasDest = false;
+			if (amoebaAttack(*m, *e))
+			{
+				++m_stats.orders;
+			}
+			continue;
+		}
+		Object *best = nullptr;
+		float bestD = 0.0f;
+		for (Object *e : cands)
+		{
+			if (!CombatQueries::isAlive(*e) || m->getRelationship(*e) != ENEMIES)
+			{
+				continue;
+			}
+			const float d2 = CombatQueries::edgeDistanceSquared2D(*m, *m->getPosition(), *e, *e->getPosition());
+			if (!best || d2 < bestD || (d2 == bestD && e->getID() < best->getID()))
+			{
+				best = e;
+				bestD = d2;
+			}
+		}
+		if (!best)
+		{
+			rec.hasDest = false;
+			continue;
+		}
+		const Coord3D &ep = *best->getPosition();
+		const Coord3D &mp = *m->getPosition();
+		float dx = SimMath::subf32(mp.x, ep.x), dy = SimMath::subf32(mp.y, ep.y);
+		const float len = SimMath::length2d(dx, dy);
+		if (len > 0.0f)
+		{
+			dx = SimMath::divf32(dx, len);
+			dy = SimMath::divf32(dy, len);
+		}
+		const float r = SimMath::addf32(CombatQueries::boundingCircleRadius(*best), CombatQueries::boundingCircleRadius(*m));
+		const Coord3D dest{ SimMath::addf32(ep.x, SimMath::mulf32(dx, r)), SimMath::addf32(ep.y, SimMath::mulf32(dy, r)), mp.z };
+		const float mx = SimMath::subf32(dest.x, rec.dest.x), my = SimMath::subf32(dest.y, rec.dest.y);
+		if (!rec.hasDest || SimMath::addf32(SimMath::mulf32(mx, mx), SimMath::mulf32(my, my)) > 25.0f)
+		{
+			rec.dest = dest;
+			rec.hasDest = true;
+			rec.dirty = true;
+			if (world().mapReady())
+			{
+				world().pathfinder().updateGoal(ai->adapter(), &rec.dest, ai->adapter().getLayer());
+			}
+			++m_stats.steps;
+		}
+	}
 }
 
 const char *HordeAIUpdate::amoebaStopLine()
