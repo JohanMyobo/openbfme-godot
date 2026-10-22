@@ -1104,7 +1104,26 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 				newObj->setBuildCostPaid(NumericState::sseFromInt32(entry->cost));
 			}
 			m_exitingObjectID = newObj->getID();
-			// RW 0x8A27D4 .. 0x8A283B: VeteranUnitsFromVeteranFactory and the XP for the producer need the experience tracker (S-203)
+			// RW 0x8A27D4 .. 0x8A283B (notre version, lu dans game.dat) : VeteranUnitsFromVeteranFactory (+ 0x40) donne un niveau (RW 0x79D7E5 gainLevels(1,
+			// false)) à l'objet sorti d'un producteur de rang >= 3 (tracker + 0x24) ; sans GiveNoXP (+ 0x30), un producteur qui accepte l'XP (RW 0x79D322)
+			// gagne le BuildCost du modèle de l'entrée (RW 0x73C25F sans joueur ni producteur, override -1) s'il est > 0 : addExperiencePoints(coût, 1, 1, 1, 0)
+			// (RW 0x79D833). Les membres d'une horde sortent ensuite sous le modèle du membre, qui n'a pas de BuildCost : seule la horde rapporte
+			{
+				ExperienceTracker *producerXp = us->getExperienceTracker();
+				ExperienceTracker *newXp = newObj->getExperienceTracker();
+				if (m_data->m_veteranUnitsFromVeteranFactory && newXp && producerXp && producerXp->getRank() >= 3)
+				{
+					newXp->gainLevels(1, false);
+				}
+				if (producerXp && entry->objectToProduce && !m_data->m_giveNoXP && producerXp->isAcceptingExperiencePoints())
+				{
+					const int xp = BuildAssistant::calcCostToBuild(*entry->objectToProduce, nullptr, nullptr, -1);
+					if (xp > 0)
+					{
+						producerXp->addExperiencePoints(NumericState::sseFromInt32(xp), true, true, true, false);
+					}
+				}
+			}
 			if (hasPos)
 			{
 				// lane BACKLOG4 (S-813): RW 0x8A284A .. 0x8A28C7: a flyer (AI vslot 0x168, true only for GiantBirdAIUpdate) is put 250 above the exit position
