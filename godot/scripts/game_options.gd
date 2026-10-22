@@ -344,6 +344,8 @@ func apply_detail() -> Dictionary:
 ## the HUD's settings of `values`: the retail keys' effects and the OpenBFME camera / interface extras
 func view_options(values: Dictionary) -> Dictionary:
 	var all_bars: bool = values.AllHealthBars == "yes"
+	if shell != null and not (shell.get_options() as Dictionary).has("AllHealthBars") and game != null and game.has_method("_bfme1_all_bars"):
+		all_bars = game._bfme1_all_bars(null) # notre version : BFME1 montre les barres des soldats sélectionnés (voir game.gd)
 	if _detail.get("ok", false) and not _detail.get("decals", true):
 		all_bars = true # RW 0x601CD3: DecalLOD Off shows them all
 	return {

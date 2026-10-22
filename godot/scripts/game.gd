@@ -2384,7 +2384,7 @@ func _install_hud(rep: Dictionary) -> void:
 	var wider := _widescreen_setting()
 	print("GAME widescreen view: %s" % ("wider (OpenBFME option, not retail)" if wider else "original"))
 	var r: Dictionary = hud.attach(_fs, _world, _camera, _shell, local, {"alternate_mouse": alternate, "camera_start": camera_start, "free_camera": free_camera,
-		"all_health_bars": all_bars != null and str(all_bars) == "yes", "zoom_out_factor": zoom_out, "widescreen_wider": wider})
+		"all_health_bars": _bfme1_all_bars(all_bars), "zoom_out_factor": zoom_out, "widescreen_wider": wider})
 	print("GAME HUD installed: ok=%s errors=%s" % [r.ok, r.errors])
 	if not r.ok:
 		hud.queue_free()
@@ -2641,6 +2641,14 @@ func _capture_image(what: String) -> Image:
 		print("GAME screenshot %s skipped: the display device cannot capture (headless)" % what)
 		return null
 	return image
+
+
+## notre version (pas retail) : en BFME1, les soldats sélectionnés montrent leur barre de vie comme dans BFME1 ; le moteur de RotWK ne la donne à
+## l'infanterie et à la cavalerie qu'avec AllHealthBars, que BFME1 n'a pas réglé : absent du fichier d'options, il vaut « yes » en BFME1
+func _bfme1_all_bars(value) -> bool:
+	if value == null or str(value).is_empty():
+		return _fs != null and _fs.is_bfme1()
+	return str(value) == "yes"
 
 
 func _save_screenshot(state: String) -> void:
