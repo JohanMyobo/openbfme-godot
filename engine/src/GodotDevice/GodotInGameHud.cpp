@@ -50,10 +50,12 @@
 #include <godot_cpp/core/object.hpp>
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
+#include <godot_cpp/classes/input_event_magnify_gesture.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/input_event_mouse.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
+#include <godot_cpp/classes/input_event_pan_gesture.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/viewport.hpp>
@@ -188,6 +190,8 @@ struct HudDevice : public AptNativeHook
 	int freeCameraToggles = 0; // lane INPUT-1: Ctrl+Z presses that toggled the free camera
 	unsigned screenshotsDone = 0; // lane INPUT-1: TAKE_SCREENSHOT requests saved
 	unsigned keyEvents = 0;       // lane INPUT-1: InputEventKey events handleInput saw
+	float trackpadScroll = 0.0f;  // notre version : le défilement à deux doigts du trackpad pas encore rendu en crans de molette
+	float trackpadPinch = 0.0f;   // notre version : le pincement du trackpad pas encore rendu en crans de molette
 	int screenshotNumber = 0;
 	String lastScreenshot;
 	bool ready = false;
@@ -277,6 +281,7 @@ struct HudDevice : public AptNativeHook
 	Ref<ImageTexture> grayTextureFor(const std::string &file); // lane OWNERFIX-3
 	// lane HUD-5: the drawable decorations (InGameHud::iconOps) drawn under the Palantir each frame
 	RID iconItem;
+	RID bfme1HelpItem; // notre version : la bulle d'aide de BFME1, effacée à chaque image
 	ObjectFilter veterancyFilter;
 	bool haveVeterancyFilter = false;
 	unsigned iconOpsDrawn = 0;
@@ -1857,6 +1862,11 @@ InGameHudNode::~InGameHudNode()
 			rs->free_rid(d->iconItem); // lane HUD-5
 			d->iconItem = RID();
 		}
+		if (d->bfme1HelpItem.is_valid())
+		{
+			rs->free_rid(d->bfme1HelpItem);
+			d->bfme1HelpItem = RID();
+		}
 	}
 	d->probeItems.clear();
 	if (playerAlive)
@@ -2767,7 +2777,14 @@ Dictionary InGameHudNode::get_mapped_image(const String &name)
 Dictionary InGameHudNode::get_hud6_state() const
 {
 	waitLogic(d.get());
-	return d->hud6 ? d->hud6->state() : Dictionary();
+	Dictionary r = d->hud6 ? d->hud6->state() : Dictionary();
+	if (d->hud)
+	{
+		// notre version : l'état de la bulle d'aide (0 .. 4, 3 affichée) et le nombre d'aides montrées (tests)
+		r["help_state"] = d->hud->helpBox().state();
+		r["helps_shown"] = (int64_t)d->hud->helpBox().helpsShown();
+	}
+	return r;
 }
 
 Dictionary InGameHudNode::get_report() const
@@ -2920,8 +2937,17 @@ void InGameHudNode::_process(double delta)
 			const Vector2 size = get_viewport_rect().size;
 			const float width = std::min(420.0f, (float)size.x * 0.4f);
 			const Rect2 rect(size.x - width - 24.0f, std::max(24.0f, (float)size.y - 370.0f), width, 300.0f);
+			// notre version : la bulle a sa propre zone, effacée à chaque image. Dessinée dans celle du nœud (jamais effacée par _process), elle
+			// s'empilait : la bulle restait affichée une fois masquée, les textes de plusieurs bulles se superposaient et la pile grossissait sans fin
+			RenderingServer *rs = RenderingServer::get_singleton();
+			if (!d->bfme1HelpItem.is_valid())
+			{
+				d->bfme1HelpItem = rs->canvas_item_create();
+				rs->canvas_item_set_parent(d->bfme1HelpItem, get_canvas_item());
+			}
+			rs->canvas_item_clear(d->bfme1HelpItem);
 			// notre version : le fond suit la hauteur du texte (il couvrait toujours 300 pixels)
-			d->hud6->drawHelp(rect, get_canvas_item(), d->hud->helpBox().isShown() ? Color(0.06f, 0.05f, 0.03f, 0.95f) : Color(0, 0, 0, 0));
+			d->hud6->drawHelp(rect, d->bfme1HelpItem, d->hud->helpBox().isShown() ? Color(0.06f, 0.05f, 0.03f, 0.95f) : Color(0, 0, 0, 0));
 		}
 
 	}
@@ -3419,6 +3445,29 @@ void InGameHudNode::handleInput(const Ref<InputEvent> &event)
 		else if ((idx == 4 || idx == 5) && mb->is_pressed())
 		{
 			d->hud->mouseWheel(idx == 4 ? 1 : -1, (int)mb->get_position().x, (int)mb->get_position().y);
+		}
+	}
+	else if (const InputEventPanGesture *pan = Object::cast_to<InputEventPanGesture>(event.ptr()))
+	{
+		// notre version : sur Mac, le défilement à deux doigts du trackpad arrive en geste (pas en molette) : rendu en crans de molette, un cran par
+		// unité de défilement vertical (Godot met les deltas du trackpad à l'échelle 0,03 : environ 30 points de défilement par cran)
+		d->trackpadScroll -= pan->get_delta().y;
+		while (std::fabs(d->trackpadScroll) >= 1.0f)
+		{
+			const int notch = d->trackpadScroll > 0.0f ? 1 : -1;
+			d->trackpadScroll -= (float)notch;
+			d->hud->mouseWheel(notch, (int)pan->get_position().x, (int)pan->get_position().y);
+		}
+	}
+	else if (const InputEventMagnifyGesture *pinch = Object::cast_to<InputEventMagnifyGesture>(event.ptr()))
+	{
+		// notre version : le pincement du trackpad (écarter = rapprocher la caméra), un cran de molette par 10 % d'agrandissement
+		d->trackpadPinch += pinch->get_factor() - 1.0f;
+		while (std::fabs(d->trackpadPinch) >= 0.1f)
+		{
+			const int notch = d->trackpadPinch > 0.0f ? 1 : -1;
+			d->trackpadPinch -= 0.1f * (float)notch;
+			d->hud->mouseWheel(notch, (int)pinch->get_position().x, (int)pinch->get_position().y);
 		}
 	}
 	else if (const InputEventKey *k = Object::cast_to<InputEventKey>(event.ptr()))
