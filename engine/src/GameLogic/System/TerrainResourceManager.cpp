@@ -659,6 +659,8 @@ void TerrainResourceManager::crc(StateHasher &h) const
 // ints; the cell size (+ 0x3C) and the largest radius (+ 0x18) reals; an int, width * height; then every cell (16 bytes, + 0x40): from version 3 its state
 // (int, cell + 0xC) and its entry count (int), each entry its player index (int) and object id (XferObjectID); before version 3 one object id that loads
 // as an OWNED cell of player -1. A load allocates the cells anew from the saved size.
+// NOTRE VERSION (v4, pas retail) : après le nombre de cellules, des suites (u32 longueur, int état, entrées) au lieu de chaque cellule ; les versions
+// 1 .. 3 se chargent toujours.
 // RETAIL QUIRK, NOT KEPT (S-4253): the node's complete flag (+ 0x11) is not in the layout, so a retail load leaves it uninitialised (the local record at
 // RW 0x75C816 is pushed with that byte unset). The port keeps it: after the retail layout an OpenBFME trailer (its own version) holds every claimant's
 // complete flag in list order.
@@ -672,7 +674,7 @@ void TerrainResourceManager::xfer(Xfer &x)
 	{
 		m_pending.reset(); // an earlier load that never finished is dropped
 	}
-	XferVersion v{ 1, 3 };
+	XferVersion v{ 1, 4 };
 	x.xferVersion(v);
 	std::vector<Claimant> loadedClaimants;
 	std::vector<Claimant> &claimants = loading ? loadedClaimants : m_claimants; // saving reads the members, loading fills temporaries
@@ -717,15 +719,99 @@ void TerrainResourceManager::xfer(Xfer &x)
 	}
 	std::vector<Cell> loadedCells;
 	std::vector<Cell> &cells = loading ? loadedCells : m_cells;
-	x.xferVectorSize(cells, v.current >= 3 ? 8 : 4);
-	if (loading && cells.size() != m_cells.size())
+	if (v.current >= 4)
 	{
-		throw XferException("terrain resource manager: " + std::to_string(cells.size()) + " cells for a grid of " + std::to_string(m_cells.size()));
+		// notre version (v4) : les cellules en suites. La grille de BFME1 (TerrainResourceCellSize de ses données) compte ~20 millions de cellules
+		// presque toutes libres et vides : 8 octets chacune faisaient ~160 Mo par sauvegarde. Une suite = des cellules consécutives de même état sans
+		// entrée ; une cellule qui a des entrées est une suite à elle seule (une suite de plus d'une cellule n'en porte jamais : un fichier ne peut pas
+		// faire copier ses entrées des millions de fois). Le nombre de cellules est celui de la grille de la partie, déjà allouée
+		std::uint32_t total = (std::uint32_t)cells.size();
+		x.xferUnsignedInt(&total);
+		if (loading && total != m_cells.size())
+		{
+			throw XferException("terrain resource manager: " + std::to_string(total) + " cells for a grid of " + std::to_string(m_cells.size()));
+		}
+		struct Run
+		{
+			std::uint32_t length = 0;
+			std::int32_t state = CELL_FREE;
+			std::vector<ClaimEntry> claims;
+		};
+		std::vector<Run> runs;
+		if (!loading)
+		{
+			for (const Cell &c : cells)
+			{
+				if (!runs.empty() && c.claims.empty() && runs.back().claims.empty() && runs.back().state == c.state)
+				{
+					++runs.back().length;
+				}
+				else
+				{
+					runs.push_back(Run{ 1, c.state, c.claims });
+				}
+			}
+		}
+		x.xferVectorSize(runs, 12);
+		std::uint64_t covered = 0;
+		for (Run &r : runs)
+		{
+			x.xferUnsignedInt(&r.length);
+			x.xferInt(&r.state);
+			x.xferVectorSize(r.claims, 8);
+			for (ClaimEntry &e : r.claims)
+			{
+				x.xferInt(&e.playerIndex);
+				x.xferObjectID(&e.objectId);
+			}
+			if (!loading)
+			{
+				continue;
+			}
+			if (r.length == 0 || (r.length > 1 && !r.claims.empty()))
+			{
+				throw XferException("terrain resource manager: a run of " + std::to_string(r.length) + " cells holds " + std::to_string(r.claims.size()) + " entries");
+			}
+			covered += r.length;
+			if (covered > total)
+			{
+				throw XferException("terrain resource manager: the runs cover more than the grid's " + std::to_string(total) + " cells");
+			}
+		}
+		if (loading)
+		{
+			if (covered != total)
+			{
+				throw XferException("terrain resource manager: the runs cover " + std::to_string(covered) + " of the grid's " + std::to_string(total) + " cells");
+			}
+			cells.resize(total);
+			size_t i = 0;
+			for (const Run &r : runs)
+			{
+				for (std::uint32_t k = 0; k < r.length; ++k, ++i)
+				{
+					cells[i].state = r.state;
+					cells[i].claims = r.claims;
+				}
+			}
+		}
+	}
+	else
+	{
+		x.xferVectorSize(cells, v.current >= 3 ? 8 : 4);
+		if (loading && cells.size() != m_cells.size())
+		{
+			throw XferException("terrain resource manager: " + std::to_string(cells.size()) + " cells for a grid of " + std::to_string(m_cells.size()));
+		}
 	}
 	for (size_t i = 0; i < cells.size(); ++i)
 	{
 		Cell &c = cells[i];
-		if (loading && v.current < 3)
+		if (v.current >= 4)
+		{
+			// déjà lues en suites
+		}
+		else if (loading && v.current < 3)
 		{
 			ClaimEntry e;
 			x.xferObjectID(&e.objectId);
