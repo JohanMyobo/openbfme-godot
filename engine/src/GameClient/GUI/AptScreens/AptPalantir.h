@@ -126,6 +126,7 @@ public:
 	// lane HUD-6: the side command bar shows only for the control bar's context object when it is a DOZER the local player controls (RW 0x92F27D: template
 	// KindOf + 0x109 bit 0x40, its controlling player the local one); the HUD sets it every update
 	void setBfme1(bool value); // community PR #36: BFME1 data (InGameHud::boot)
+	bool bfme1() const { return m_bfme1; }
 	void setSideBarObject(bool localDozer) { m_sideBarGate = localDozer; }
 	// lane HUD-6: the side bar's SetButtonState calls made ("2 _show", "5 _hide"; the last 64) and the frames shown (+ 0xD8)
 	const std::vector<std::string> &sideBarCalls() const { return m_sideBarCalls; }

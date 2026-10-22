@@ -58,6 +58,16 @@ void AptPalantir::hook(const std::string &name)
 		{
 			m_initialized = true;
 			windows().note("palantir-initialized", "AptPalantir::OnInitialized: the HUD movie is running");
+			// notre version (pas retail) : le Palantir.apt de BFME1 porte la barre des héros dans son propre clip HeroSelectUI (pas de
+			// InGameHeroSelect.swf ni de OnHeroSelectLoaded) : elle est branchée ici, sur ce clip, quand le film démarre
+			if (m_bfme1 && m_heroSelectPath.empty())
+			{
+				m_heroSelectPath = levelPrefix() + "HeroSelectUI";
+				if (m_heroSelect)
+				{
+					m_heroSelect(m_heroSelectPath, true);
+				}
+			}
 		}
 		else if (name == "PalantirCommandUI::OnButtonFrameLoaded" || name == "OnAptInGameSideCommandBarButtonFrameLoaded")
 		{
@@ -258,6 +268,20 @@ const AptPalantir::NativeImage *AptPalantir::imageForClip(const std::string &cli
 			const std::string frame = levelPrefix() + "CommandButtons.Command" + std::to_string(i + 1);
 			if (clipPath.compare(0, frame.size() + 1, frame + ".") == 0) return imageFor(frame);
 		}
+	if (m_bfme1)
+	{
+		// notre version : le portrait d'un bouton HeroSelectUI.Hero<n> de BFME1 est l'image que la barre des héros donne à « <clip>_Hero<n>Image »
+		const std::string bar = levelPrefix() + "HeroSelectUI.Hero";
+		if (clipPath.compare(0, bar.size(), bar) == 0)
+		{
+			const size_t dot = clipPath.find('.', bar.size());
+			const std::string n = clipPath.substr(bar.size(), dot == std::string::npos ? std::string::npos : dot - bar.size());
+			if (!n.empty() && n.find_first_not_of("0123456789") == std::string::npos)
+			{
+				return imageFor(levelPrefix() + "HeroSelectUI_Hero" + n + "Image");
+			}
+		}
+	}
 	return imageFor(imageMapVar.empty() ? clipPath : imageMapVar);
 }
 

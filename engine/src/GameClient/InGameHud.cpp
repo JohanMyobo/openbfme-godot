@@ -45,6 +45,7 @@
 #include "Libraries/Source/Apt/AptRenderList.h"
 
 #include <algorithm>
+#include <map>
 #include <chrono>
 #include <set>
 
@@ -259,6 +260,20 @@ bool InGameHud::boot(std::string *error)
 		const std::string relative = clipPath.compare(0, prefix.size(), prefix) == 0 ? clipPath.substr(prefix.size()) : clipPath;
 		InGameHeroSelect::Movie movie;
 		movie.call = [pal, relative](const std::string &fn, const std::vector<std::string> &args) { return pal->callMovie(relative, fn, args); };
+		if (pal->bfme1())
+		{
+			// notre version (pas retail) : la barre de BFME1 est dans Palantir.apt, dont la racine porte les mêmes fonctions sous d'autres noms
+			// (ShowHeroSelectInterface, SetHeroSelectButtonState ...) ; elle n'a pas de SetFaction (son bouton « tous » lit sa faction lui-même)
+			movie.call = [pal](const std::string &fn, const std::vector<std::string> &args) {
+				static const std::map<std::string, std::string> kNames = { { "Show", "ShowHeroSelectInterface" }, { "SetButtonState", "SetHeroSelectButtonState" },
+					{ "SetButtonRankProgress", "SetHeroSelectButtonRankProgress" }, { "SetButtonHealthBar", "SetHeroSelectButtonHealthBar" },
+					{ "SetButtonSelectedHighlightState", "SetHeroSelectButtonSelectedHighlightState" }, { "SetButtonFlashEffectState", "SetHeroSelectButtonFlashEffectState" },
+					{ "KillButtonEffects", "KillHeroSelectButtonEffects" }, { "PlayButtonLevelUpEffect", "PlayHeroSelectButtonLevelUpEffect" },
+					{ "PlayButtonAttackedEffect", "PlayHeroSelectButtonAttackedEffect" }, { "SetSelectAllHeroesButtonState", "SetSelectAllHeroesButtonState" } };
+				const auto it = kNames.find(fn);
+				return it != kNames.end() && pal->callMovie("", it->second, args);
+			};
+		}
 		movie.setImage = [pal](const std::string &key, const std::string &image) { pal->setNativeImage(key, image); }; // RW 0x6236DE / 0x623790
 		movie.setText = [this](const std::string &record, const std::string &text) { m_wm->setAptText(record, text); };
 		std::string faction;
@@ -269,14 +284,17 @@ bool InGameHud::boot(std::string *error)
 		}
 		m_heroSelect->attach(pal->level(), clipPath, std::move(movie), faction);
 		// the commands "_level%d.<path>_OnBttnHeroSelect" / "_OnBttnSelectAllHeroes" (RW 0xC7EFB0 / 0xC7EF98), registered once per path
-		const std::string commands = m_heroSelect->commandPrefix();
+		// notre version : les boutons de BFME1 passent par GameCode, qui envoie « AptPalantir::OnBttnHeroSelect » (le nom du bouton, « Hero<n> ») et
+		// « AptPalantir::OnBttnSelectAllHeroes »
+		const std::string commands = pal->bfme1() ? std::string("AptPalantir::") : m_heroSelect->commandPrefix() + "_";
 		if (m_heroCommands.insert(commands).second)
 		{
-			pal->registerCommand(commands + "_OnBttnHeroSelect", [this](const std::string &arg) {
+			pal->registerCommand(commands + "OnBttnHeroSelect", [this](const std::string &arg) {
 				const auto worldContext = enterContext();
-				m_heroSelect->onButtonPressed(arg);
+				const size_t dot = arg.rfind('.'); // notre version : un chemin de clip (BFME1) se réduit au nom du bouton
+				m_heroSelect->onButtonPressed(dot == std::string::npos ? arg : arg.substr(dot + 1));
 			});
-			pal->registerCommand(commands + "_OnBttnSelectAllHeroes", [this](const std::string &) {
+			pal->registerCommand(commands + "OnBttnSelectAllHeroes", [this](const std::string &) {
 				const auto worldContext = enterContext();
 				m_heroSelect->selectAllHeroes();
 			});
