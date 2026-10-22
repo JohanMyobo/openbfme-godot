@@ -3858,6 +3858,13 @@ func _exit_to_score_screen() -> void:
 	if not _shell.set_score_screen_from_world(_world):
 		_fail("the score screen has no data")
 		return
+	if _fs.is_bfme1():
+		# notre version : BFME1 n'a pas TimeLine.apt (son écran des scores est ScoreScreen.apt, pas porté) : l'écran restait vide, sans bouton, et la
+		# partie finie ne se quittait plus. On revient au menu comme le Continuer de l'écran des scores
+		print("GAME END BFME1 : pas d'écran des scores porté (ScoreScreen.apt), retour au menu")
+		_state = State.SCORE
+		_score_continue()
+		return
 	if not _shell.shell_push("TimeLine.apt"):
 		_fail("the shell refused TimeLine.apt: " + str(_shell.get_shell_report().errors))
 		return

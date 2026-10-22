@@ -343,9 +343,9 @@ TEST_CASE("save4d economy: the terrain resource manager in retail's DoXfer layou
 	const std::vector<std::uint8_t> bytes = blockBytes(*a.logic, "obfme:Economy");
 
 	// retail's layout after the settings hash and the context: version 3, the claimant count, each id / radius / visible, the region, the size, the cell
-	// size, the largest radius, the cell count
+	// size, the largest radius, the cell count (notre version : version 4, les cellules suivent en suites)
 	const size_t trm = payloadOf("obfme:Economy") + 1 + 4 + 4 + 4 + 1 + 1 + 4 + 1 + 1;
-	CHECK(bytes[trm] == 3);
+	CHECK(bytes[trm] == 4);
 	CHECK(std::vector<std::uint8_t>(bytes.begin() + (std::ptrdiff_t)trm + 1, bytes.begin() + (std::ptrdiff_t)trm + 5) == std::vector<std::uint8_t>{ 2, 0, 0, 0 });
 	const size_t grid = trm + 5 + 2 * 9 + 24;
 	CHECK(std::vector<std::uint8_t>(bytes.begin() + (std::ptrdiff_t)grid, bytes.begin() + (std::ptrdiff_t)grid + 8) ==
@@ -533,7 +533,7 @@ TEST_CASE("save4d script engine: counters, flags, timers, the scripts' active fl
 		"block 'obfme:ScriptEngine': script engine: the snapshot's game has map scripts, this game has none");
 }
 
-TEST_CASE("save4d: the version windows of the retail record layouts: Script (1, 2), SequentialScript (1, 1), the terrain resource manager (1, 3), the "
+TEST_CASE("save4d: the version windows of the retail record layouts: Script (1, 2), SequentialScript (1, 1), the terrain resource manager (1, 4), the "
 		  "Create-a-Hero record (1, 8)")
 {
 	CHECK(CreateAHeroHero::XFER_VERSION == 8);
@@ -570,8 +570,8 @@ TEST_CASE("save4d: the version windows of the retail record layouts: Script (1, 
 	XferSave t;
 	m.xfer(t);
 	std::vector<std::uint8_t> trm = t.data();
-	REQUIRE(trm[0] == 3);
-	trm[0] = 4;
+	REQUIRE(trm[0] == 4); // notre version : v4, les cellules en suites
+	trm[0] = 5;
 	error.clear();
 	try
 	{
@@ -582,7 +582,7 @@ TEST_CASE("save4d: the version windows of the retail record layouts: Script (1, 
 	{
 		error = e.what();
 	}
-	CHECK(error == "Don't know how to load version 4 (most recent is 3)");
+	CHECK(error == "Don't know how to load version 5 (most recent is 4)");
 }
 
 TEST_CASE("save4d T4: the registry gives the seven SAVE-4d blocks their xfer; with SAVE-4b and 4c merged (SAVE-4e) the snapshot is written")
@@ -650,6 +650,32 @@ void putU32(std::vector<std::uint8_t> &b, size_t at, std::uint32_t v)
 std::uint32_t getU32(const std::vector<std::uint8_t> &b, size_t at)
 {
 	return (std::uint32_t)b[at] | ((std::uint32_t)b[at + 1] << 8) | ((std::uint32_t)b[at + 2] << 16) | ((std::uint32_t)b[at + 3] << 24);
+}
+
+// notre version : le bloc obfme:Economy (v4, les cellules en suites) réécrit comme l'écrivait la version 3 (chaque cellule : état, nombre d'entrées,
+// entrées), la fin du bloc recalée
+std::vector<std::uint8_t> economyAsV3(const std::vector<std::uint8_t> &v4)
+{
+	const size_t trm = payloadOf("obfme:Economy") + 21;
+	REQUIRE(v4[trm] == 4);
+	const size_t grid = trm + 5 + 9 * (size_t)getU32(v4, trm + 1) + 24;
+	std::vector<std::uint8_t> out(v4.begin(), v4.begin() + (std::ptrdiff_t)grid + 20); // through the cell count
+	out[trm] = 3;
+	const std::uint32_t runs = getU32(v4, grid + 20);
+	size_t at = grid + 24;
+	for (std::uint32_t r = 0; r < runs; ++r)
+	{
+		const std::uint32_t length = getU32(v4, at), entries = getU32(v4, at + 8);
+		for (std::uint32_t k = 0; k < length; ++k)
+		{
+			out.insert(out.end(), v4.begin() + (std::ptrdiff_t)at + 4, v4.begin() + (std::ptrdiff_t)(at + 12 + 8 * (size_t)entries));
+		}
+		at += 12 + 8 * (size_t)entries;
+	}
+	out.insert(out.end(), v4.begin() + (std::ptrdiff_t)at, v4.end()); // the trailer, then SG_EOF
+	const size_t endAt = payloadOf("obfme:Economy") - 4;
+	putU32(out, endAt, getU32(v4, endAt) + (std::uint32_t)(out.size() - v4.size()));
+	return out;
 }
 
 size_t find(const std::vector<std::uint8_t> &b, const std::vector<std::uint8_t> &pattern)
@@ -729,29 +755,49 @@ TEST_CASE("save4d hostile streams: an oversized count, a duplicate or dangling r
 		putU32(bad, trm + 14, f1->getID());
 		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) ==
 			"block 'obfme:Economy': terrain resource manager: object " + std::to_string(f1->getID()) + " claims twice");
+		// notre version (v4) : grid + 16 le nombre de cellules, grid + 20 le nombre de suites, puis chaque suite : longueur, état, entrées
 		bad = good;
-		REQUIRE(good[grid + 20] == 1); // cell 0 lies in the water strip
-		bad[grid + 20] = 5;
+		REQUIRE(good[grid + 28] == 1); // cell 0 lies in the water strip (the first run's state)
+		bad[grid + 28] = 5;
 		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) == "block 'obfme:Economy': terrain resource manager: cell 0 has the state 5");
-		bad[grid + 20] = 0;
+		bad[grid + 28] = 0;
 		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) ==
 			"block 'obfme:Economy': terrain resource manager: cell 0 is blocked in this game's map, not in the snapshot");
 		bad = good;
 		putU32(bad, grid + 16, 0x10000000u);
+		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) == "block 'obfme:Economy': terrain resource manager: 268435456 cells for a grid of 400");
+		bad = good;
+		putU32(bad, grid + 20, 0x10000000u);
 		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) ==
-			"block 'obfme:Economy': a list declares 268435456 entries of at least 8 bytes, more than the " + std::to_string(good.size() - 7 - (grid + 20)) +
+			"block 'obfme:Economy': a list declares 268435456 entries of at least 12 bytes, more than the " + std::to_string(good.size() - 7 - (grid + 24)) +
 			" bytes left");
+		// the runs: one of no cell, one that covers one cell less or one more than the grid
+		const std::uint32_t firstRun = getU32(good, grid + 24);
+		bad = good;
+		putU32(bad, grid + 24, 0);
+		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) == "block 'obfme:Economy': terrain resource manager: a run of 0 cells holds 0 entries");
+		putU32(bad, grid + 24, firstRun - 1);
+		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) == "block 'obfme:Economy': terrain resource manager: the runs cover 399 of the grid's 400 cells");
+		putU32(bad, grid + 24, firstRun + 1);
+		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) == "block 'obfme:Economy': terrain resource manager: the runs cover more than the grid's 400 cells");
 		CHECK(section(*b.logic, "economy") == before);
 		CHECK(b.logic->economy().resources().claimants().empty());
 		// cell 210 (10, 10), owned by Alice's complete farm: its entry names a player the game lacks, an object that claims nothing, an incomplete owner
-		size_t cell = grid + 20;
-		for (int i = 0; i < 210; ++i)
+		// notre version (v4) : the run that starts at cell 210 (a cell with entries is a run of its own); `cell` points at its state
+		size_t cell = grid + 24;
+		for (std::uint32_t first = 0; first < 210;)
 		{
-			cell += 8 + 8 * (size_t)getU32(good, cell + 4); // a cell: its state, its entry count, its entries
+			first += getU32(good, cell);
+			cell += 12 + 8 * (size_t)getU32(good, cell + 8); // a run: its length, its state, its entry count, its entries
 		}
+		REQUIRE(getU32(good, cell) == 1u);
+		cell += 4;
 		REQUIRE(getU32(good, cell) == 3u);
 		REQUIRE(getU32(good, cell + 4) == 1u);
 		REQUIRE(getU32(good, cell + 12) == f1->getID());
+		bad = good;
+		putU32(bad, cell - 4, 2); // a run of two cells may not carry entries
+		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) == "block 'obfme:Economy': terrain resource manager: a run of 2 cells holds 1 entries");
 		bad = good;
 		putU32(bad, cell + 8, 19);
 		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) == "block 'obfme:Economy': terrain resource manager: cell 210 names player index 19, which this game lacks");
@@ -763,11 +809,11 @@ TEST_CASE("save4d hostile streams: an oversized count, a duplicate or dangling r
 		putU32(bad, cell + 12, f2->getID());
 		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) ==
 			"block 'obfme:Economy': terrain resource manager: cell 210 is owned by the object " + std::to_string(f2->getID()) + ", whose claim is not complete");
-		// an entry count of cell 0 beyond the block
+		// an entry count of the first run beyond the block
 		bad = good;
-		putU32(bad, grid + 24, 0x10000000u);
+		putU32(bad, grid + 32, 0x10000000u);
 		CHECK(loadError(*b.logic, { "obfme:Economy" }, bad) ==
-			"block 'obfme:Economy': a list declares 268435456 entries of at least 8 bytes, more than the " + std::to_string(good.size() - 7 - (grid + 28)) +
+			"block 'obfme:Economy': a list declares 268435456 entries of at least 8 bytes, more than the " + std::to_string(good.size() - 7 - (grid + 36)) +
 			" bytes left");
 		// a claimant count beyond the block
 		bad = good;
@@ -1038,4 +1084,25 @@ TEST_CASE("save4d script engine: a non-default acquired-science queue and generi
 	CHECK(b.g.engine().audioTimers().size() == 1u);
 	CHECK(b.g.engine().getUnitNamed("HeroN1") == b.dummy);
 	CHECK(b.g.engine().sequentialScripts().size() == 1u);
+}
+
+TEST_CASE("save4d economy, notre version : un bloc obfme:Economy de version 3 (les cellules une à une, les sauvegardes d'avant les suites) se charge "
+		  "toujours, à l'état de la version 4")
+{
+	EconWorld a;
+	a.farmAt("Alice", 10, 10, true);
+	a.farmAt("Bob", 12, 10, false);
+	a.logic->economy().setScoring(false);
+	const std::uint32_t economyA = section(*a.logic, "economy");
+	const std::vector<std::uint8_t> v4 = blockBytes(*a.logic, "obfme:Economy");
+	const std::vector<std::uint8_t> v3 = economyAsV3(v4);
+
+	EconWorld b;
+	b.make("Farm", b.teamOf("Alice"));
+	b.make("Farm", b.teamOf("Bob"));
+	REQUIRE(section(*b.logic, "economy") != economyA);
+	b.logic->gameState().loadBlocks({ "obfme:Economy" }, v3);
+	CHECK(section(*b.logic, "economy") == economyA);
+	CHECK(b.logic->economy().resources().blockedCells() == 40u);
+	CHECK(blockBytes(*b.logic, "obfme:Economy") == v4); // saved again: version 4, the same runs
 }
