@@ -30,6 +30,7 @@
 #include <vector>
 
 struct ScriptActionRec;
+struct ScriptCondition;
 class ScriptEngine;
 
 class ScriptActions
@@ -45,6 +46,12 @@ public:
 	static bool executeCampaignAction(ScriptEngine &engine, const ScriptActionRec &a, const std::string &name);
 	// lane SIEGE-1 (ScriptActionsSiege.cpp): the siege engines' deploy / retract actions; false when `name` is not one of them
 	static bool executeSiegeAction(ScriptEngine &engine, const ScriptActionRec &a, const std::string &name);
+	// notre version (ScriptActionsBase.cpp) : les actions de l'IA de BFME1 (références d'unités, camps déployés, bâtiments sur les emplacements,
+	// argent et points de commandement vers un compteur) ; false quand `name` n'en est pas une
+	static bool executeBaseAction(ScriptEngine &engine, const ScriptActionRec &a, const std::string &name);
+	// notre version (ScriptActionsBase.cpp) : les conditions de l'IA de BFME1 (menace d'une unité / d'une équipe, camp déployable) ; false quand
+	// `name` n'en est pas une, sinon la réponse dans `result`
+	static bool evaluateBaseCondition(ScriptEngine &engine, const ScriptCondition &c, const std::string &name, bool &result);
 	// lane SIEGE-1: the condition IS_SEIGE_ATTACHED_TO_WALL (RW 0x7E5760): the named unit's siege deploy is deployed
 	static bool isSiegeAttachedToWall(ScriptEngine &engine, const std::string &unitName);
 	// lane CAMP-1: the stops of the campaign script ports (S-1363, S-1365; lane CAMP-1H: S-1712)

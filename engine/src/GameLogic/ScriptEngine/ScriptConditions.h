@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+class CastleBehavior;
 class Object;
 class Player;
 class ScriptEngine;
@@ -45,6 +46,8 @@ public:
 	static std::vector<Player *> players(ScriptEngine &engine, const std::string &parameter);
 	static Player *firstPlayer(ScriptEngine &engine, const std::string &parameter); // RW 0x6A85B6
 	// a team by its (side-qualified) name, ZH ScriptEngine::getTeamNamed (RW 0x759FDA); "<This Team>" is the team script's team, else the condition team
+	// notre version : le CastleBehavior de l'objet, ou en BFME1 celui du camp dont l'objet est le donjon (son CastleMemberBehavior)
+	static CastleBehavior *castleOf(GameLogic &logic, Object &obj);
 	static Team *team(ScriptEngine &engine, const std::string &name, bool create = false); // lane CAMP-1H: `create` (RW 0x759FDA's flag)
 	// RW 0x70CF29
 	static bool pointInTrigger(const TriggerArea &t, float x, float y);

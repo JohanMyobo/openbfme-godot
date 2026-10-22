@@ -5,6 +5,7 @@
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
 
 #include "Common/Crc32.h"
+#include "Common/GameCommon.h"
 #include "Common/Player.h"
 #include "Common/PlayerList.h"
 #include "Common/StateHash.h"
@@ -23,6 +24,7 @@
 #include "GameLogic/ScriptEngine/ScriptConditions.h"
 #include "GameLogic/ScriptEngine/ScriptTemplates.h"
 #include "GameLogic/SimMath.h"
+#include "GameLogic/SkirmishAI/AIThreatFinder.h"
 
 #include <algorithm>
 
@@ -112,6 +114,9 @@ void ScriptEngine::reset()
 	m_counters.clear();
 	m_flags.clear();
 	m_namedObjects.clear();
+	m_references.clear();
+	m_unitThreat.clear();
+	m_teamThreat.clear();
 	m_objectLists.clear();
 	m_triggers = nullptr;
 	m_runtimeTriggers.clear(); // lane HUD-5
@@ -327,6 +332,27 @@ ScriptEngine::RGroup *ScriptEngine::findGroup(const std::string &name)
 	return side ? findGroupIn(side->root, q.second) : nullptr;
 }
 
+bool ScriptEngine::evaluateProductionCondition(Player &player, const std::string &name)
+{
+	RSide *side = findSide(player.getPlayerName());
+	RScript *script = side ? findScriptIn(side->root, name) : nullptr;
+	if (!script || !script->def)
+	{
+		return false;
+	}
+	Player *const savedPlayer = m_currentPlayer;
+	Team *const savedTeam = m_thisTeam;
+	const std::string savedSide = m_currentSide;
+	m_currentPlayer = &player;
+	m_thisTeam = nullptr;
+	m_currentSide = player.getPlayerName();
+	const bool r = evaluateConditionsNoContext(*script->def);
+	m_currentPlayer = savedPlayer;
+	m_thisTeam = savedTeam;
+	m_currentSide = savedSide;
+	return r;
+}
+
 bool ScriptEngine::scriptActive(const std::string &name) const
 {
 	RScript *s = const_cast<ScriptEngine *>(this)->findScript(name);
@@ -505,6 +531,18 @@ Object *ScriptEngine::getUnitNamed(const std::string &name) const
 	{
 		return nullptr;
 	}
+	// notre version : RW 0x75A2AB, la référence du camp d'abord (une référence dont l'objet n'est plus là laisse la main au cache)
+	if (!m_references.empty())
+	{
+		auto ref = m_references.find(qualify(name));
+		if (ref != m_references.end())
+		{
+			if (Object *o = m_logic.findObjectByID(ref->second))
+			{
+				return o;
+			}
+		}
+	}
 	for (const auto &e : m_namedObjects)
 	{
 		if (e.first == name)
@@ -513,6 +551,84 @@ Object *ScriptEngine::getUnitNamed(const std::string &name) const
 		}
 	}
 	return nullptr;
+}
+
+void ScriptEngine::setReference(const std::string &name, const Object &obj)
+{
+	if (!name.empty())
+	{
+		m_references[qualify(name)] = obj.getID();
+	}
+}
+
+void ScriptEngine::copyReference(const std::string &to, const std::string &from)
+{
+	auto it = m_references.find(qualify(from));
+	if (!to.empty() && it != m_references.end())
+	{
+		m_references[qualify(to)] = it->second;
+	}
+}
+
+namespace
+{
+// RW 0x69609F / 0x7A5B03 : ThePartitionManager autour du centre, en 2D (FROM_CENTER_2D), les filtres ENEMIES de `ref` (RW 0xC11DC0, masque 1), vivant
+// (RW 0xC10E20) ; la somme x87 des valeurs de menace (RW 0x68F0EC, fadd puis fstp dword)
+float threatAround(GameLogic &logic, const Object &ref, const Coord3D &centre, float radius)
+{
+	PartitionFilterFn enemies([&ref](Object &o) { return ref.getRelationship(o) == ENEMIES; });
+	PartitionFilterFn alive([](Object &o) { return !o.isEffectivelyDead(); });
+	float sum = 0.0f;
+	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(centre, radius, FROM_CENTER_2D, { &enemies, &alive }, ITER_FASTEST))
+	{
+		sum = SimMath::fstpDword(SimMath::pc24AddW(AIThreatFinder::threatValueWide(*h.object), (double)sum));
+	}
+	return sum;
+}
+
+UnsignedInt threatExpiry(GameLogic &logic)
+{
+	return logic.getFrame() + 5u * (UnsignedInt)LOGICFRAMES_PER_SECOND; // RW 0x68C7C1(5000) : 5000 / 1000 * images par seconde
+}
+} // namespace
+
+float ScriptEngine::unitThreat(Object &obj, float radius)
+{
+	auto &e = m_unitThreat[obj.getID()];
+	if (e.first == 0 || e.first < m_logic.getFrame())
+	{
+		e = { threatExpiry(m_logic), threatAround(m_logic, obj, *obj.getPosition(), radius) };
+	}
+	return e.second;
+}
+
+float ScriptEngine::teamThreat(Team &team, float radius)
+{
+	// RW 0x7A5B03 : le centre de l'équipe (RW 0x7A0ECD) et un membre pour la relation (RW 0x66362D) ; sans membre la valeur reste la précédente
+	const std::vector<Object *> live = ScriptConditions::members(team);
+	const Object *ref = nullptr;
+	Coord3D centre{ 0.0f, 0.0f, 0.0f };
+	int n = 0;
+	for (Object *o : live)
+	{
+		if (o->isEffectivelyDead() || o->isDestroyed())
+		{
+			continue;
+		}
+		ref = ref ? ref : o;
+		centre.x = SimMath::sseAdd(centre.x, o->getPosition()->x);
+		centre.y = SimMath::sseAdd(centre.y, o->getPosition()->y);
+		centre.z = SimMath::sseAdd(centre.z, o->getPosition()->z);
+		++n;
+	}
+	auto &e = m_teamThreat[team.getID()];
+	if (ref && (e.first == 0 || e.first < m_logic.getFrame()))
+	{
+		const float inv = SimMath::sseDiv(1.0f, SimMath::sseFromInt32(n));
+		centre = { SimMath::sseMul(inv, centre.x), SimMath::sseMul(inv, centre.y), SimMath::sseMul(inv, centre.z) };
+		e = { threatExpiry(m_logic), threatAround(m_logic, *ref, centre, radius) };
+	}
+	return e.second;
 }
 
 bool ScriptEngine::didUnitExist(const std::string &name) const
@@ -1893,6 +2009,16 @@ void ScriptEngine::crc(StateHasher &h) const
 	{
 		h.addString(e.first);
 		h.addU32(e.second);
+	}
+	if (!m_references.empty()) // notre version : hachées dès qu'une référence existe
+	{
+		h.addU32((std::uint32_t)m_references.size());
+		for (const auto &e : m_references)
+		{
+			h.addString(e.first.first);
+			h.addString(e.first.second);
+			h.addU32(e.second);
+		}
 	}
 	if (!m_sequential.empty()) // lane SCRIPT-2: hashed once a sequential script exists
 	{

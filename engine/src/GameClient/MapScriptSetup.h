@@ -19,7 +19,8 @@
 //     at RW 0x6280A3 says otherwise (then "").
 // INFERENCE (stop S-1181): how the SkirmishHuman side's scripts reach the human slots is not decoded; here every human slot side runs the
 // Multiplayer_Human library (its PlayerAIType), every AI slot side its faction's DefaultPlayerAIType library, the kept map sides their own list and
-// LibraryMaps. The library's teams are not added (no retail library used by the corpus' skirmish / campaign opening needs one; counted).
+// LibraryMaps. Notre version : les équipes des bibliothèques (les AI_<Faction> de BFME1 en ont) sont gardées par camp, dans l'ordre de chargement ;
+// LiveGame les ajoute au camp comme RW 0x72D943 (nom absent chez ce propriétaire).
 
 #pragma once
 
@@ -31,6 +32,7 @@
 #include <vector>
 
 class ArchiveFileSystem;
+class Dict;
 class SkirmishAIStore;
 class PlayerList;
 struct LoadedMap;
@@ -50,14 +52,18 @@ public:
 
 	const std::vector<ScriptEngine::SideScripts> &sides() const { return m_sides; }
 	std::vector<std::string> notes() const { return m_notes; }
+	// notre version : par camp (index de `sides`), les équipes de ses bibliothèques (RW 0x72D943), dans l'ordre de chargement
+	const std::vector<std::vector<const Dict *>> &libraryTeams() const { return m_libraryTeams; }
 
 private:
 	bool loadLibrary(ArchiveFileSystem &fs, const std::string &path, ScriptEngine::SideScripts &side, std::set<std::string> &loaded, int depth,
 		std::string *error);
 	bool loadLibraryList(ArchiveFileSystem &fs, const std::vector<std::string> &paths, ScriptEngine::SideScripts &side, std::set<std::string> &loaded,
 		int depth, std::string *error);
+	size_t m_currentSide = 0;
 
 	std::vector<std::unique_ptr<LoadedMap>> m_libraries;
 	std::vector<ScriptEngine::SideScripts> m_sides;
 	std::vector<std::string> m_notes;
+	std::vector<std::vector<const Dict *>> m_libraryTeams;
 };

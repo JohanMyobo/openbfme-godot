@@ -109,9 +109,12 @@ bool MapScriptSetup::loadLibrary(ArchiveFileSystem &fs, const std::string &path,
 	}
 	side.lists.push_back(&lib->playerScripts.lists[1]);
 	side.libraries.push_back(path);
-	if (lib->sides.hasTeams && !lib->sides.teams.empty())
+	if (lib->sides.hasTeams)
 	{
-		m_notes.push_back("[S-1181] script library " + path + ": its " + std::to_string(lib->sides.teams.size()) + " teams are not added to the game");
+		for (const Dict &t : lib->sides.teams)
+		{
+			m_libraryTeams[m_currentSide].push_back(&t); // RW 0x72D943, ajoutées par LiveGame
+		}
 	}
 	return true;
 }
@@ -121,8 +124,10 @@ bool MapScriptSetup::build(ArchiveFileSystem &fs, const SkirmishAIStore &aiStore
 {
 	m_sides.clear();
 	m_sides.resize(sides.sides.size());
+	m_libraryTeams.assign(sides.sides.size(), {});
 	for (size_t i = 0; i < sides.sides.size(); ++i)
 	{
+		m_currentSide = i;
 		ScriptEngine::SideScripts &out = m_sides[i];
 		out.sideName = sides.sides[i].dict.getAsciiString("playerName");
 		// the map's own list and LibraryMaps of a side of that name (kept sides; a dropped slot side runs none of the map's Player_N scripts)

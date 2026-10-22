@@ -31,7 +31,9 @@
 #include "Common/GameCommon.h"
 #include "Common/NumericState.h"
 #include "GameClient/MapClassification.h"
+#include "Common/BfmeGame.h"
 #include "GameClient/MapScriptSetup.h"
+#include "GameLogic/AI/AIPlayerTeams.h"
 #include "GameLogic/NewGame/SkirmishSides.h"
 #include "GameLogic/Economy.h"
 #include "GameLogic/VictoryConditions.h"
@@ -674,6 +676,20 @@ bool LiveGame::setupMapScripts(const Options &options, const SidesList &sidesUse
 	{
 		return false;
 	}
+	// RW 0x72D943 : les équipes des bibliothèques d'un camp entrent dans le jeu, à lui, quand il n'en a pas déjà une de ce nom
+	for (size_t i = 0; i < m_scriptSetup->libraryTeams().size() && i < sidesUsed.sides.size(); ++i)
+	{
+		Player *owner = m_players->findPlayerWithName(sidesUsed.sides[i].dict.getAsciiString("playerName"));
+		for (const Dict *t : m_scriptSetup->libraryTeams()[i])
+		{
+			const std::string tname = t->getAsciiString("teamName");
+			if (owner && !m_teams.findTeamPrototype(owner->getPlayerName(), tname))
+			{
+				m_teams.initTeam(tname, owner, t->getBool("teamIsSingleton"), t);
+			}
+		}
+	}
+	m_logic->aiTeams().newGame(isBfme1Data(m_fs)); // notre version : la production d'équipes de l'IA BFME1 (AIPlayerTeams.h)
 	m_scriptHost = std::make_unique<LiveGameScriptHost>(*m_logic, m_ai.get(), m_world.audio(), m_fs);
 	ScriptEngine &engine = m_logic->scriptEngine();
 	engine.setHost(m_scriptHost.get());

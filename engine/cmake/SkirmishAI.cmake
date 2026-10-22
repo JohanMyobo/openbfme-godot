@@ -4,6 +4,7 @@
 set(OPENBFME_SKIRMISH_AI_SOURCES
     src/GameLogic/SkirmishAI/SkirmishAIData.cpp
     src/GameLogic/SkirmishAI/SkirmishAIManager.cpp
+    src/GameLogic/AI/AIPlayerTeams.cpp
     src/GameLogic/SkirmishAI/AIBaseBuilder.cpp
     src/GameLogic/SkirmishAI/AITacticalAI.cpp
     src/GameLogic/SkirmishAI/AIThreatFinder.cpp

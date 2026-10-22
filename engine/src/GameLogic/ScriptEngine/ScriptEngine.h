@@ -157,6 +157,14 @@ public:
 	// lane CAMP-1: RW 0x759601, the object has an entry in the named cache
 	bool isInNamedCache(const Object &obj) const;
 	bool didUnitExist(const std::string &name) const;    // RW 0x758F46: an entry whose object is gone
+	// Notre version (l'IA de BFME1) : les références d'unités (RW + 0x191B8, la clé qualifiée par le camp comme un compteur, RW 0x604043) que
+	// SET_UNIT_REFERENCE, NAMED_BASE_UNPACK et BUILD_BASE_BUILDING posent ; getUnitNamed les lit avant le cache des noms (RW 0x75A2AB)
+	void setReference(const std::string &name, const Object &obj);       // RW 0x608397
+	void copyReference(const std::string &to, const std::string &from); // RW 0x608504
+	// RW 0x697B41 / 0x7A6A20 : la menace autour d'une unité / d'une équipe (la somme des valeurs de menace des ennemis vivants dans le rayon, RW 0x69609F /
+	// 0x7A5B03), gardée 5 secondes (RW 0x68C7C1(5000) : + 0x468 = maintenant + 5 * images par seconde)
+	float unitThreat(Object &obj, float radius);
+	float teamThreat(Team &team, float radius);
 
 	// ---- counters / flags / timers (side-qualified names, RW 0x72C43C) ------------------------------------------------------------------------
 	struct Counter
@@ -187,6 +195,9 @@ public:
 	RScript *findScript(const std::string &name);
 	RGroup *findGroup(const std::string &name);
 	bool scriptActive(const std::string &name) const;
+	// notre version (IA BFME1) : TeamPrototype::evaluateProductionCondition (RW 0x7A3C49) : le script `name` du camp du joueur, ses conditions évaluées
+	// avec ce joueur courant ; faux quand le camp n'a pas ce script
+	bool evaluateProductionCondition(Player &player, const std::string &name);
 
 	// ---- the current context (valid inside update) -----------------------------------------------------------------------------------------
 	Player *currentPlayer() const { return m_currentPlayer; }
@@ -429,6 +440,9 @@ private:
 	std::map<std::pair<std::string, std::string>, Counter> m_counters;
 	std::map<std::pair<std::string, std::string>, bool> m_flags;
 	std::vector<std::pair<std::string, ObjectID>> m_namedObjects; ///< insertion order
+	std::map<std::pair<std::string, std::string>, ObjectID> m_references; ///< notre version : RW + 0x191B8 (sauvé à partir de la version 3)
+	std::map<ObjectID, std::pair<UnsignedInt, float>> m_unitThreat;      ///< notre version : RW Object + 0x464 / 0x468 (non sauvé : recalculé)
+	std::map<std::uint32_t, std::pair<UnsignedInt, float>> m_teamThreat;   ///< notre version : RW Team + 0x120, par TeamID (non sauvé : recalculé)
 	std::vector<std::pair<std::string, std::vector<std::string>>> m_objectLists; ///< creation order
 	const std::vector<TriggerArea> *m_triggers = nullptr;
 	struct RuntimeTrigger

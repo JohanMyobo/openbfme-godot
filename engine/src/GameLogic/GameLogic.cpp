@@ -16,6 +16,7 @@
 #include "GameLogic/StructureStops.h"
 #include "GameLogic/VictoryConditions.h"
 #include "GameLogic/SkirmishAI/SkirmishAIManager.h"
+#include "GameLogic/AI/AIPlayerTeams.h"
 #include "Common/JobSystem.h"
 #include "Common/NumericState.h"
 
@@ -60,6 +61,7 @@ GameLogic::GameLogic(ThingFactory &things, ModuleFactory &modules, PlayerList &p
 	, m_victory(std::make_unique<VictoryConditions>(*this))
 	, m_sell(std::make_unique<BuildAssistantSell>(*this)) // lane FACT-A
 	, m_skirmishAI(std::make_unique<SkirmishAIManager>(*this))
+	, m_aiTeams(std::make_unique<AIPlayerTeams>(*this))
 	, m_experience(std::make_unique<ExperienceWorld>(*this))
 	, m_createAHeroes(std::make_unique<CreateAHeroGame>(*this))
 	, m_weather(std::make_unique<GlobalWeatherSystem>(*this))
@@ -648,6 +650,7 @@ void GameLogic::update(int phase)
 		// experience system (lane COMBAT-2 had it in the phase 1 row; RW 0x62E6AF .. 0x62E6DD updates four other subsystems)
 		m_victory->update();
 		m_experience->update(); // RW 0x62EBD9: TheDelayedExperienceLevelGrantSystem vslot 0x28, one of that row's subsystems (lane XP-1)
+		m_aiTeams->update(); // notre version : l'AIPlayer de BFME1 (RW 0x8F9705, appelé par Player::update)
 		m_skirmishAI->update(); // RW 0x62EBEF: TheSkirmishAIManager vslot 0x28, one of that row's subsystems (after the victory conditions; lane AI-1)
 	}
 	if (phase == 1)
@@ -957,6 +960,7 @@ void GameLogic::reset()
 	m_victory->reset();
 	m_sell->reset(); // lane FACT-A
 	m_skirmishAI->reset();
+	m_aiTeams->reset();
 	m_experience->reset();
 	m_partition->reset();
 	m_emotions->reset();

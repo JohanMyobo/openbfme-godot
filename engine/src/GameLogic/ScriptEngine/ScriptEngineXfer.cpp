@@ -143,7 +143,8 @@ void ScriptEngine::xfer(Xfer &x)
 	}
 	// lane SAVE-4e: version 2 adds BACKLOG4's triggered special power lists (merged after SAVE-4d); no version 1 snapshot was ever written by a
 	// release (loads of snapshots begin with SAVE-4e), so version 1 is not read (a list it lacked would load empty, silently)
-	XferVersion v{ 2, 2 };
+	// notre version : la version 3 ajoute les références d'unités (l'IA de BFME1) ; une sauvegarde en version 2 les charge vides
+	XferVersion v{ 2, 3 };
 	x.xferVersion(v);
 	bool loaded = loading ? false : m_loaded;
 	x.xferBool(&loaded);
@@ -384,6 +385,33 @@ void ScriptEngine::xfer(Xfer &x)
 			}
 		}
 	}
+	// notre version (version 3) : les références d'unités par (camp, nom), dans l'ordre des clés
+	std::map<std::pair<std::string, std::string>, ObjectID> loadedRefs;
+	auto &refs = loading ? loadedRefs : m_references;
+	if (v.current >= 3)
+	{
+		n = loading ? 0 : (std::uint32_t)refs.size();
+		x.xferCount(&n, 1 + 1 + 4, sizeof(std::pair<const std::pair<std::string, std::string>, ObjectID>) + Xfer::kNodeBytes);
+		auto rit = refs.begin();
+		for (std::uint32_t i = 0; i < n; ++i)
+		{
+			std::pair<std::string, std::string> key;
+			ObjectID id = INVALID_ID;
+			if (!loading)
+			{
+				key = rit->first;
+				id = rit->second;
+				++rit;
+			}
+			x.xferAsciiString(&key.first);
+			x.xferAsciiString(&key.second);
+			x.xferObjectID(&id);
+			if (loading && !refs.emplace(key, id).second)
+			{
+				throw XferException("script engine: the unit reference '" + key.first + "/" + key.second + "' twice");
+			}
+		}
+	}
 	if (!loading)
 	{
 		return;
@@ -437,7 +465,8 @@ void ScriptEngine::xfer(Xfer &x)
 			}
 		}
 	}
-	m_pendingLoad = [this, staged, firstUpdate, difficulty, bonus]() {
+	auto stagedRefs = std::make_shared<std::map<std::pair<std::string, std::string>, ObjectID>>(std::move(loadedRefs));
+	m_pendingLoad = [this, staged, stagedRefs, firstUpdate, difficulty, bonus]() {
 		m_firstUpdate = firstUpdate;
 		m_gameDifficulty = difficulty;
 		m_objectsReceiveDifficultyBonus = bonus;
@@ -455,6 +484,9 @@ void ScriptEngine::xfer(Xfer &x)
 		m_acquiredSciences = std::get<7>(*staged);
 		m_audioTimers = std::move(std::get<8>(*staged));
 		m_triggeredSpecialPowers = std::move(std::get<9>(*staged)); // lane SAVE-4e
+		m_references = std::move(*stagedRefs); // notre version
+		m_unitThreat.clear();
+		m_teamThreat.clear();
 	};
 }
 

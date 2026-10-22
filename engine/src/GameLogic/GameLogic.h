@@ -144,6 +144,7 @@ public:
 };
 
 class StateHasher;
+class AIPlayerTeams;
 
 // What the creation path of an object needs from the game's data (read by the loaders from the mounted INI files, never hard coded).
 struct ObjectFilter;
@@ -173,6 +174,15 @@ struct GameLogicSettings
 	// lane BACKLOG-8 r2: the formation march's rows: AIData FormationEnemyDistance + 0x70, NarrowPassageScale + 0xAC (parseReal), WaitForOthers + 0xB8
 	// (parseBool; MinDistanceForGroup + 0x6C and UseFormations + 0xBD are lane BACKLOG6's, above); GameData GroupMoveClickToGatherAreaFactor + 0xB60 (row
 	// RW 0xC00600, parseReal). Defaults: the constructors' (AIData RW 0x6FFD0E .. 0x6FFDE5: 600.0 RW 0xBF24F8, 1.0, false; GameData RW 0x643167: 1.0)
+	// notre version (IA BFME1, AIPlayer RW 0x8F805D) : les rangs de production d'équipes d'AIData (table RW 0xC1CB30 ..: TeamSeconds + 0x8, TeamsWealthyRate
+	// + 0x1C, TeamsPoorRate + 0x24, TeamResourcesToStart + 0x28 par parseReal RW 0x42ED00 ; Wealthy + 0xC, Poor + 0x10 par RW 0x42EC5E)
+	float teamSeconds = 0.0f;
+	int aiWealthy = 0;
+	int aiPoor = 0;
+	float teamsWealthyRate = 1.0f;
+	float teamsPoorRate = 1.0f;
+	float teamResourcesToStart = 0.0f;
+	float maxRecruitRadius = 0.0f; // MaxRecruitRadius + 0x5C (RW 0xC1CC..)
 	float formationEnemyDistance = 600.0f;
 	float narrowPassageScale = 1.0f;
 	bool waitForOthers = false;
@@ -329,6 +339,7 @@ public:
 	const VictoryConditions &victory() const { return *m_victory; }
 	// lane AI-1: TheSkirmishAIManager (newGame after the starting bases; update() runs in phase 5 after the destroy list)
 	SkirmishAIManager &skirmishAI() { return *m_skirmishAI; }
+	AIPlayerTeams &aiTeams() { return *m_aiTeams; } // notre version : la production d'équipes de l'IA BFME1
 	const SkirmishAIManager &skirmishAI() const { return *m_skirmishAI; }
 	// lane XP-1: TheDelayedExperienceLevelGrantSystem (update in phase 5 after the destroy list, RW 0x62EBD9) and the skill point awards
 	ExperienceWorld &experience() { return *m_experience; }
@@ -785,6 +796,7 @@ private:
 	std::unique_ptr<VictoryConditions> m_victory;
 	std::unique_ptr<BuildAssistantSell> m_sell; // lane FACT-A
 	std::unique_ptr<SkirmishAIManager> m_skirmishAI;
+	std::unique_ptr<AIPlayerTeams> m_aiTeams;
 	std::unique_ptr<ExperienceWorld> m_experience; // lane XP-1
 	std::unique_ptr<CreateAHeroGame> m_createAHeroes; // lane HERO-2
 	std::unique_ptr<GlobalWeatherSystem> m_weather; // lane SPELL-2

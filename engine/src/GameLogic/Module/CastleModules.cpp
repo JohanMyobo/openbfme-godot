@@ -487,6 +487,45 @@ Object *CastleBehavior::preBuild(const ThingTemplate &tt, int index, bool instan
 	return buildOnPad(list[at], tt, instant);
 }
 
+// RW 0x79A688 : la liste de preBuild ; les emplacements absents, les WALL_UPGRADE, ceux sans fondation (RW 0x68C3C3) ou déjà occupés sont sautés ; la distance
+// est le carré de l'écart 2D (RW 0x66137C) ; le meilleur part de [0xC11F8C] (mode 0, le plus proche) ou de 0 (mode 1, le plus loin) ; puis RW 0x79A518(.., 0)
+Object *CastleBehavior::preBuildNear(const ThingTemplate &tt, const Coord3D &pos, int mode)
+{
+	if (mode != 0 && mode != 1)
+	{
+		return nullptr;
+	}
+	GameLogic &logic = getObject()->logic();
+	const std::vector<ObjectID> &list = templateKindOf(logic, tt, "FS_BASE_DEFENSE") && !m_defenseFoundations.empty() ? m_defenseFoundations : m_foundations;
+	float best = mode == 0 ? 9999999.0f : 0.0f; // RW 0xC11F8C
+	ObjectID bestId = INVALID_ID;
+	for (ObjectID padId : list)
+	{
+		Object *pad = logic.findObjectByID(padId);
+		if (!pad || pad->isKindOf((unsigned)castleNames().wallUpgrade) || occupantOf(*pad))
+		{
+			continue;
+		}
+		bool hasFoundation = false;
+		for (const std::unique_ptr<BehaviorModule> &m : pad->modules())
+		{
+			hasFoundation = hasFoundation || m->getFoundationAIUpdate();
+		}
+		if (!hasFoundation)
+		{
+			continue;
+		}
+		const float dx = SimMath::subf32(pad->getPosition()->x, pos.x), dy = SimMath::subf32(pad->getPosition()->y, pos.y);
+		const float d = SimMath::addf32(SimMath::mulf32(dx, dx), SimMath::mulf32(dy, dy));
+		if (mode == 0 ? d < best : d > best)
+		{
+			best = d;
+			bestId = padId;
+		}
+	}
+	return bestId == INVALID_ID ? nullptr : buildOnPad(bestId, tt, false);
+}
+
 // RW 0x79A518
 Object *CastleBehavior::buildOnPad(ObjectID padId, const ThingTemplate &tt, bool instant)
 {

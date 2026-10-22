@@ -208,6 +208,10 @@ public:
 	const std::string &explicitTemplateName() const { return m_explicitTemplate; }
 	// RW 0x79AC19
 	void registerOwnedObject(Object &obj);
+	// notre version : BUILD_BASE_BUILDING (RW 0x7BEE14 -> RW 0x79A5EC(type, -2, 0)) : le premier emplacement libre bâtit le type, pas instantané
+	Object *preBuildForScript(const ThingTemplate &tt) { return preBuild(tt, -2, false); }
+	// RW 0x79A688 : l'emplacement libre le plus proche (mode 0) ou le plus loin (mode 1) de pos le bâtit ; autre mode : rien
+	Object *preBuildNear(const ThingTemplate &tt, const Coord3D &pos, int mode);
 	// lane CASTLE-1: the stop lines S-950 .. S-952 (in GameLogic::report through BuildStops)
 	static std::vector<std::string> stopLines();
 

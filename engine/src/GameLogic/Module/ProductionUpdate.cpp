@@ -27,6 +27,7 @@
 #include "Common/Thing/ThingTemplate.h"
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/AI/AIPlayerTeams.h"
 #include "GameLogic/HeroSystem.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/GiantBirdAIUpdate.h"
@@ -1175,6 +1176,7 @@ void ProductionUpdate::completeUnit(ProductionEntry *entry, Player *player, Unsi
 			}
 			// RW 0x8A2944 .. 0x8A29EC: the player's upgrades are applied to the new unit (UPGRADE-1), voice / EVA events (audio), the player's unit created
 			// hook, then CreateModule::onBuildComplete on every create module
+			logic.aiTeams().onUnitProduced(*us, *newObj); // notre version : Player::onUnitCreated (RW 0x6AA688) -> AIPlayer::onUnitProduced (IA BFME1)
 			for (const std::unique_ptr<BehaviorModule> &m : newObj->modules())
 			{
 				if (CreateModuleInterface *create = m->getCreate())
