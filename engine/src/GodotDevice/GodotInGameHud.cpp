@@ -289,6 +289,7 @@ struct HudDevice : public AptNativeHook
 	Ref<ImageTexture> grayTextureFor(const std::string &file); // lane OWNERFIX-3
 	// lane HUD-5: the drawable decorations (InGameHud::iconOps) drawn under the Palantir each frame
 	RID iconItem;
+	RID bfme1HelpItem; // notre version : la bulle d'aide de BFME1, effacée à chaque image
 	ObjectFilter veterancyFilter;
 	bool haveVeterancyFilter = false;
 	unsigned iconOpsDrawn = 0;
@@ -1842,6 +1843,11 @@ InGameHudNode::~InGameHudNode()
 			rs->free_rid(d->iconItem); // lane HUD-5
 			d->iconItem = RID();
 		}
+		if (d->bfme1HelpItem.is_valid())
+		{
+			rs->free_rid(d->bfme1HelpItem);
+			d->bfme1HelpItem = RID();
+		}
 	}
 	d->probeItems.clear();
 	if (playerAlive)
@@ -2966,7 +2972,14 @@ Dictionary InGameHudNode::message_lines_state() const
 Dictionary InGameHudNode::get_hud6_state() const
 {
 	waitLogic(d.get());
-	return d->hud6 ? d->hud6->state() : Dictionary();
+	Dictionary r = d->hud6 ? d->hud6->state() : Dictionary();
+	if (d->hud)
+	{
+		// notre version : l'état de la bulle d'aide (0 .. 4, 3 affichée) et le nombre d'aides montrées (tests)
+		r["help_state"] = d->hud->helpBox().state();
+		r["helps_shown"] = (int64_t)d->hud->helpBox().helpsShown();
+	}
+	return r;
 }
 
 Dictionary InGameHudNode::get_report() const
@@ -3132,8 +3145,17 @@ void InGameHudNode::_process(double delta)
 			const Vector2 size = get_viewport_rect().size;
 			const float width = std::min(420.0f, (float)size.x * 0.4f);
 			const Rect2 rect(size.x - width - 24.0f, std::max(24.0f, (float)size.y - 370.0f), width, 300.0f);
+			// notre version : la bulle a sa propre zone, effacée à chaque image. Dessinée dans celle du nœud (jamais effacée par _process), elle
+			// s'empilait : la bulle restait affichée une fois masquée, les textes de plusieurs bulles se superposaient et la pile grossissait sans fin
+			RenderingServer *rs = RenderingServer::get_singleton();
+			if (!d->bfme1HelpItem.is_valid())
+			{
+				d->bfme1HelpItem = rs->canvas_item_create();
+				rs->canvas_item_set_parent(d->bfme1HelpItem, get_canvas_item());
+			}
+			rs->canvas_item_clear(d->bfme1HelpItem);
 			// notre version : le fond suit la hauteur du texte (il couvrait toujours 300 pixels)
-			d->hud6->drawHelp(rect, get_canvas_item(), d->hud->helpBox().isShown() ? Color(0.06f, 0.05f, 0.03f, 0.95f) : Color(0, 0, 0, 0));
+			d->hud6->drawHelp(rect, d->bfme1HelpItem, d->hud->helpBox().isShown() ? Color(0.06f, 0.05f, 0.03f, 0.95f) : Color(0, 0, 0, 0));
 		}
 
 	}
