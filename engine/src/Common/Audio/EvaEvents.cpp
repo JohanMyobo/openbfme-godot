@@ -165,15 +165,17 @@ void EvaEventStore::parsePredefined(INI *ini, const AudioEventInfoStore &audio)
 	const std::string name = ini->getNextToken();
 	// community PR #36: BFME1 Eva.cpp names three events absent from RotWK's predefined table (BFME1 data only, Common/BfmeGame.h)
 	const bool bfme1 = ini->bfme1Data();
+	const bool overlay = ini->getLoadType() == INI_LOAD_CREATE_OVERRIDES;
+	// notre version : un map.ini les prédéfinit aussi (MAP GOOD Isengard, EnemyCampSighted) : ils sont créés dans la table qui va être écrite. L'index lu dans la
+	// table de base dépassait celle de la carte (22 entrées prédéfinies) : écriture hors limites, plantage au chargement de la mission
 	if (bfme1)
 		for (const char *event : { "BaseUnderAttack", "AllyUnderAttack", "EnemyCampSighted" })
-			if (findIndex(event, false) < 0) createRecord(event, false);
-	const int index = findIndex(name, false);
+			if (findIndex(event, overlay) < 0) createRecord(event, overlay);
+	const int index = findIndex(name, overlay);
 	if (index < 0 || (!bfme1 && index >= kPredefinedCount))
 	{
 		throw INIException(3, "'%s' is not a predefined Eva event name", name.c_str());
 	}
-	const bool overlay = ini->getLoadType() == INI_LOAD_CREATE_OVERRIDES;
 	if (overlay && index == 0)
 	{
 		throw INIException(3, "You cannot redefine the default Eva event in a map.ini");

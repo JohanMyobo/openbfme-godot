@@ -549,6 +549,24 @@ TEST_CASE("audio ini: AudioSettings, MiscAudio, AudioLOD and the animation setti
 // ---------------------------------------------------------------------------------------------
 // Eva.ini, LargeGroupAudio.ini, ScoredKillEvaAnnouncer.ini
 // ---------------------------------------------------------------------------------------------
+TEST_CASE("notre version : un map.ini de BFME1 prédéfinit un événement Eva propre à BFME1 (MAP GOOD Isengard, EnemyCampSighted) sans écrire hors de la table de la carte")
+{
+	AudioFixture f;
+	f.fx.mount({ { "Data\\INI\\Default\\SubsystemLegend.ini", "" } }); // ce que isBfme1Data reconnaît
+	REQUIRE(f.fx.env.bfme1Data());
+	const std::string base = std::string(kDefaults) + "AudioEvent Snd\n  Sounds = a\nEnd\n";
+	REQUIRE_MESSAGE(f.load(base + "PredefinedEvaEvent DefaultEvaEvent\n  Priority = 5\nEnd\nNewEvaEvent UnitUnderAttack\n  Priority = 2\nEnd\n").empty(), "base");
+	const EvaEventStore &e = f.state.eva;
+	const std::string err = f.load("PredefinedEvaEvent EnemyCampSighted\n  Priority = 7\nEnd\nPredefinedEvaEvent EnemyCampDestroyed\n  Priority = 8\nEnd\n", INI_LOAD_CREATE_OVERRIDES);
+	CHECK_MESSAGE(err.empty(), err);
+	const int sighted = e.findIndex("EnemyCampSighted", true);
+	REQUIRE(sighted == 24); // les 22 prédéfinis, puis BaseUnderAttack, AllyUnderAttack, EnemyCampSighted
+	REQUIRE(e.recordCount(true) == 25);
+	CHECK(e.record(sighted, true)->priority == 7u);
+	CHECK(e.record(e.findIndex("EnemyCampDestroyed", true), true)->priority == 8u);
+	CHECK(e.record(e.findIndex("EnemyCampSighted", false), false)->priority == 5u); // le map.ini ne touche pas la table de base
+}
+
 TEST_CASE("audio ini: PredefinedEvaEvent / NewEvaEvent rules (names, defaults, forward references, map.ini)")
 {
 	AudioFixture f;
