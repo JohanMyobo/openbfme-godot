@@ -423,6 +423,8 @@ public:
 	// logic_thread, progress, test_hooks, record_memory (lane SAVE-2: the mission is recorded in memory so it can be saved) }; the report of start_new_game plus "start" { local_player, local_player_index, camera_start (the map's
 	// InitialCameraPosition waypoint, else Player_1_Start), slot_players [], starting_objects [] } and "mission" (the mission's record)
 	Dictionary start_campaign_mission(const Dictionary &options);
+	// notre version : une mission d'une région de la campagne de BFME1 (ActCampaign.h), { map, difficulty, progress, test_hooks } : même partie qu'une mission, sans campagne linéaire
+	Dictionary start_region_mission(const Dictionary &options);
 	Dictionary start_tutorial(const Dictionary &options); // lane BFME2CAMP1: AptMainMenu::OnTutorial's Basic / Advanced (GodotGameWorldCampaign.cpp)
 	// the running mission's end: { ended, victory, action, frame } (the script engine's VICTORY / QUICKVICTORY / DEFEAT, ScriptEngine::endRequests)
 	Dictionary campaign_status() const;

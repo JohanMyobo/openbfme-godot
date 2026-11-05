@@ -22,6 +22,7 @@
 #include "GodotDevice/GodotVideoStream.h"
 #include "GodotDevice/GodotW3DModelBuilder.h"
 #include "GodotDevice/GodotLivingWorld.h" // WOTR-1
+#include "GodotDevice/GodotActCampaign.h" // notre version
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
@@ -59,6 +60,7 @@ static void initialize_openbfme(ModuleInitializationLevel p_level)
 	GDREGISTER_CLASS(InstallSetup);
 	GDREGISTER_CLASS(VP6MovieStream); // CAMP-2
 	GDREGISTER_CLASS(LivingWorldGame); // WOTR-1
+	GDREGISTER_CLASS(ActCampaignGame); // notre version : la campagne par actes de BFME1
 }
 
 static void uninitialize_openbfme(ModuleInitializationLevel p_level)

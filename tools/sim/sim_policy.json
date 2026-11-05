@@ -209,6 +209,10 @@
    "reason": "lane END-1: the client half of the end of a game (the local player's end screen, messages and Eva, the human player's win / loss script library run over the logic snapshot, the score screen data copied when the game is left): reads the logic, never writes simulation state"
   },
   {
+   "glob": "src/GameLogic/LivingWorld/ActCampaign.cpp",
+   "reason": "the BFME1 campaign's scripted acts on the world map: a single player screen between missions, on the render clock, never in a network game or a replay; it does not touch the battle's logic"
+  },
+  {
    "glob": "src/GameClient/LivingWorldScoreScreen.cpp",
    "reason": "WOTR2 milestone 5: the War of the Ring score screen's data (TimeLine type 6) copied from the strategic logic's score keepers when the war is left: reads the logic, never writes simulation state"
   },

@@ -24,6 +24,7 @@ list(APPEND OPENBFME_SIM_SOURCES
 )
 # client-only sources (the GUI globs of tools/sim/sim_policy.json)
 set(OPENBFME_WOTR1_SOURCES
+    src/GameLogic/LivingWorld/ActCampaign.cpp
     src/GameClient/GUI/AptScreens/AptStrategicHUD.cpp
     src/GameClient/GUI/AptScreens/AptStrategicConflictResults.cpp
     src/GameClient/GUI/AptScreens/AptBannerUI.cpp
@@ -37,4 +38,5 @@ set(OPENBFME_WOTR1_TESTS
     tests/test_wotr4.cpp
     tests/test_wotr8_net.cpp
     tests/test_wotr9_online.cpp
+    tests/test_act_campaign.cpp
 )

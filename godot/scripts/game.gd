@@ -296,7 +296,7 @@ const DEFAULT_MAP := "maps/map mp evendim/map mp evendim.map"
 const LEVEL_MAIN_MENU_FRAMES := 20
 const KEEP_RENDERING := true
 
-enum State { BOOT, MENU, LOADING, PLAYING, SCORE, FAILED, STRATEGIC }
+enum State { BOOT, MENU, LOADING, PLAYING, SCORE, FAILED, STRATEGIC, ACT_MAP } # ACT_MAP : notre version, l'écran du monde de BFME1
 
 var _res := Vector2i(0, 0)
 var _seed := 0
@@ -680,6 +680,10 @@ var _net_lobby_again := false
 var _lan_shell_game := false ## lane UBERJOIN-1: the running game was started by the LAN lobby screen (LanGameStart): its room is left at the game's end, Continue shows the lobby screen
 var _continuing := false
 var _campaign_flow: Node        # lane CAMP-1: scripts/campaign_flow.gd
+var _act_map: Node             # notre version : BFME1, scripts/act_campaign.gd
+var _act_auto := 0              # --act-auto=N : l'écran du monde joue seul N régions gagnées, puis la partie se termine (les tests)
+var _act_menu := ""             # --act-menu=good|evil : le chemin du joueur dans le menu de BFME1, jusqu'à l'écran du monde (les tests)
+var _act_shots := ""            # --act-shots=DIR : des images de l'écran du monde (les tests)
 var _campaign_complete := false
 var _cli_campaign := ""
 var _cli_mission := 0
@@ -1141,6 +1145,13 @@ func _ready() -> void:
 			_stance_at = int(arg.substr(12)) # lane CAMPUI-1 (proof captures, test hooks)
 		elif arg.begins_with("--objectives-at="):
 			_objectives_at = int(arg.substr(16)) # lane CAMPUI-1 (proof captures)
+		elif arg.begins_with("--act-auto="):
+			_act_auto = int(arg.substr(11))
+			_campaign_win = true
+		elif arg.begins_with("--act-menu="):
+			_act_menu = arg.substr(11)
+		elif arg.begins_with("--act-shots="):
+			_act_shots = arg.substr(12)
 		elif arg == "--campaign-win":
 			_campaign_win = true
 		elif arg.begins_with("--campaign-check="):
@@ -1550,7 +1561,11 @@ func _boot() -> void:
 	add_child(_campaign_flow)
 	_shell.set_save_folder(_save_flow.save_dir()) # lane CAMPSAVE-1: MainMenuContinueCampaign's folder (RW 0x91BBBB)
 	_campaign_flow.migrate_sidecar() # lane CAMPSAVE-1: an old progress sidecar becomes the auto-save
-	if not _cli_campaign.is_empty():
+	if not _cli_campaign.is_empty() and _fs.is_bfme1():
+		_campaign_flow.auto_win_all = _act_auto > 0
+		_start_act_campaign(_cli_campaign, _cli_difficulty)
+		return
+	elif not _cli_campaign.is_empty():
 		_campaign_flow.mission = _cli_mission
 		_campaign_flow.campaign = _cli_campaign
 		_campaign_flow.difficulty = _cli_difficulty
@@ -1561,6 +1576,9 @@ func _boot() -> void:
 			_run_campaign_save_test() # lane SAVE-2
 		elif not _campsave_test.is_empty():
 			_run_campsave_test() # lane CAMPSAVE-1
+		return
+	if not _act_menu.is_empty():
+		_run_act_menu(_act_menu)
 		return
 	if _display_check:
 		_run_display_check() # lane OPTS-1
@@ -1900,7 +1918,11 @@ func _on_shell_request(action: String, argument: String) -> void:
 	elif action == "OnlineGameStart":
 		_online_from_screens = true # lane ONLINEUX-1
 		_on_online_started(argument) # lane ONLINE-4: the staging room's START, played as ONLINE-2's
-	elif _fs.is_bfme1() and action in ["GoodCampaign", "EvilCampaign", "ContinueCampaign", "LoadCampaign"]:
+	elif _fs.is_bfme1() and action == "LoadCampaign" and argument.begins_with("bfme2:"):
+		# notre version : les boutons de campagne de BFME1 (AptMainMenu::GoodCampaign / EvilCampaign) ouvrent l'écran du monde ; rva0051F1C0Campaign lit la difficulté
+		var evil := argument.begins_with("bfme2:evil:")
+		_start_act_campaign("MordorCampaign" if evil else "GondorCampaign", _campaign_flow.difficulty_from_command(argument.get_slice(":", 2)))
+	elif _fs.is_bfme1() and action in ["ContinueCampaign", "LoadCampaign"]:
 		_shell.shell_screen_unavailable(action)
 	elif action == "Expansion1Campaign": # lane CAMP-1: RW 0x91BE64 (ANGMAR_CAMPAIGN; the demo campaign only with [0xDE4324] + 0x60)
 		_campaign_flow.start("ANGMAR_CAMPAIGN", _campaign_flow.difficulty_from_command(argument))
@@ -3114,6 +3136,62 @@ func _step(frames: int) -> void:
 		return # lane SPELLRC-1: a recording's frames are its clock (see _wait_seconds)
 	while Time.get_ticks_msec() < until:
 		await get_tree().process_frame
+
+
+## notre version : le chemin d'un joueur, avec de vrais clics : Solo Play, Campaign, Good ou Evil Campaign, puis la difficulté (--act-menu=good|evil). Les boutons se
+## cherchent à leur libellé, les noms d'instance du film ne les suivent pas (docs/BFME1.md).
+func _run_act_menu(which: String) -> void:
+	for i in 600:
+		if _menu_revealed:
+			break
+		await _step(1)
+	await _step(120)
+	var level: int = _shell.shell_top_level()
+	for label in ["$SoloPlay", "$Campaign", "$GoodCampaign" if which == "good" else "$EvilCampaign", "$MediumDifficulty"]:
+		var clip := _bfme1_clip_with_label(level, label)
+		if clip.is_empty():
+			var seen := PackedStringArray()
+			for b in _shell.list_buttons(level):
+				seen.append(String(b.path))
+			_fail("ACTMENU no button %s among %s" % [label, ", ".join(seen)])
+			return
+		await _wait_button_settled(level, clip)
+		if not await _click_button(level, clip):
+			_fail("ACTMENU the click on %s failed" % clip)
+			return
+		print("ACTMENU %s -> %s" % [label, clip])
+		await _step(120)
+	for i in 900:
+		if _act_map != null and _act_map.active:
+			print("ACTMENU the world screen is up: ", _act_map.campaign_name, " difficulty ", _act_map.difficulty)
+			get_tree().quit(0)
+			return
+		await _step(1)
+	_fail("ACTMENU the world screen did not open: stack %s" % str(_shell.shell_stack()))
+
+
+func _bfme1_clip_with_label(level: int, label: String) -> String:
+	var root := "_level%d." % level
+	for b in _shell.list_buttons(level):
+		var parts := String(b.path).trim_prefix(root).split(".")
+		var clip := ""
+		for part in parts:
+			clip = part if clip.is_empty() else clip + "." + part
+			var name: Dictionary = _shell.get_member(level, clip, "buttonName")
+			if name.get("found", false) and name.value == label:
+				return clip
+	return ""
+
+
+## notre version : BFME1, la campagne par actes (scripts/act_campaign.gd)
+func _start_act_campaign(campaign_name: String, difficulty: int) -> void:
+	if _act_map == null:
+		_act_map = load("res://scripts/act_campaign.gd").new()
+		_act_map.name = "ActCampaign"
+		add_child(_act_map)
+	_act_map.auto_regions = _act_auto
+	_act_map.shot_dir = _act_shots
+	_act_map.begin(self, campaign_name, difficulty)
 
 
 ## BFME1: the path (under `menu`) of the button clip whose `buttonName` is `label` ("" when none has it); the movie's labels name the

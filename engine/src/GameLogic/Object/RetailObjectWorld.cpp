@@ -118,7 +118,7 @@ RetailObjectWorld::State::State(ArchiveFileSystem &fs)
 		skip.push_back(*k); // SPELL-1: Science, Rank, SpecialPower
 	}
 	// Only replace recording handlers for the selected Living World data mode.
-	// BFME1 campaigns remain explicitly unavailable (S-5017).
+	// BFME1 campaigns do not use these stores (ActCampaign.h, S-5017).
 	skip.insert(skip.end(), m_livingWorld->blockKeywords().begin(), m_livingWorld->blockKeywords().end());
 	RegisterRecordingBlockStubs(m_env.blocks, m_recorder, skip, StubExtent::Lenient);
 	m_audio->registerBlocks(m_env.blocks);

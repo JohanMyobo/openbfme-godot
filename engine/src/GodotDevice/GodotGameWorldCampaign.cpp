@@ -84,6 +84,7 @@ void GameWorld::bindCampaignMethods()
 {
 	ClassDB::bind_method(D_METHOD("get_campaigns"), &GameWorld::get_campaigns);
 	ClassDB::bind_method(D_METHOD("start_campaign_mission", "options"), &GameWorld::start_campaign_mission);
+	ClassDB::bind_method(D_METHOD("start_region_mission", "options"), &GameWorld::start_region_mission);
 	ClassDB::bind_method(D_METHOD("start_tutorial", "options"), &GameWorld::start_tutorial); // lane BFME2CAMP1
 	ClassDB::bind_method(D_METHOD("campaign_status"), &GameWorld::campaign_status);
 	ClassDB::bind_method(D_METHOD("campaign_progress_load", "path"), &GameWorld::campaign_progress_load);
@@ -254,6 +255,53 @@ Dictionary GameWorld::start_campaign_mission(const Dictionary &options)
 		}
 	}
 	startEndGame(); // lane END-1: the end sequence (its script side takes the map scripts' VICTORY / DEFEAT, EndGameView)
+	return report;
+}
+
+
+// notre version : BFME1 lance la carte de la région choisie à l'écran du monde (MapName de LivingWorldRegionCampaign), sans LinearCampaign ni report d'unités. Les
+// adversaires SkirmishOpponent des cartes SPS et la sauvegarde de la mission ne sont pas portés (S-5017).
+Dictionary GameWorld::start_region_mission(const Dictionary &options)
+{
+	Dictionary report;
+	Array errors;
+	report["ok"] = false;
+	report["errors"] = errors;
+	if (!m_world)
+	{
+		errors.push_back("GameWorld.setup has not run");
+		return report;
+	}
+	const std::string map = n(String(options.get("map", String())));
+	if (map.empty())
+	{
+		errors.push_back("start_region_mission without a map");
+		return report;
+	}
+	m_start.reset();
+	LiveGame::Options lo;
+	lo.mapName = map;
+	lo.campaign = true; // une partie solo avec les camps et les scripts de la carte, comme une mission
+	lo.difficulty = (int)intOpt(options, "difficulty", 1);
+	lo.maxFramesPerAdvance = (int)intOpt(options, "max_frames_per_advance", 10);
+	lo.logicThread = boolOpt(options, "logic_thread", m_logicThreadDefault);
+	lo.presentationDelaySeconds = options.has("presentation_delay") ? (double)options["presentation_delay"] : (lo.logicThread ? 0.03 : 0.0);
+	Callable cb;
+	if (options.has("progress"))
+	{
+		cb = options["progress"];
+	}
+	m_testHooks = boolOpt(options, "test_hooks", false);
+	report = load_internal(lo, g(map), options, cb, true);
+	if (!(bool)report.get("ok", false) || !m_game)
+	{
+		return report;
+	}
+	report["start"] = campaignHudStart();
+	m_campaignStart = CampaignStart();
+	m_campaignStart.map = map;
+	m_campaignStart.difficulty = lo.difficulty;
+	startEndGame(); // la fin de partie des scripts de la carte (VICTORY / DEFEAT), comme une mission
 	return report;
 }
 

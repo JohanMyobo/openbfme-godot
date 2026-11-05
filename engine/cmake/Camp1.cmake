@@ -14,6 +14,7 @@ set(OPENBFME_CAMP1_SOURCES
 # the GDExtension's view of the campaigns (client: the campaign list, a mission as the game, its end, the progress sidecar)
 set(OPENBFME_CAMP1_GODOT_SOURCES
     src/GodotDevice/GodotGameWorldCampaign.cpp
+    src/GodotDevice/GodotActCampaign.cpp
 )
 set(OPENBFME_CAMP1_TESTS
     tests/test_camp1.cpp

@@ -637,7 +637,7 @@ TEST_CASE("bfme1 isolation: unavailable Living World campaigns do not abort the 
 	CHECK(world.livingWorld().mapInfo.banners[0].empty());
 	const auto stops = world.livingWorld().acceptanceStops();
 	REQUIRE(stops.size() == 1);
-	CHECK(stops[0] == "[S-5017] BFME1 Living World campaigns and saves are unavailable: campaign blocks use recording stubs, not the BFME2/RotWK War of the Ring parsers; field validation and exact nested block boundaries are unverified");
+	CHECK(stops[0] == "[S-5017] BFME1 Living World campaigns run through GameLogic/LivingWorld/ActCampaign.h, not these stores: here their blocks use recording stubs, not the BFME2/RotWK War of the Ring parsers. The campaign saves, the world screen's Apt interface and the region missions' SkirmishOpponent sides are not ported");
 	const auto worldStops = world.acceptanceStops();
 	CHECK(std::count(worldStops.begin(), worldStops.end(), stops[0]) == 1);
 }

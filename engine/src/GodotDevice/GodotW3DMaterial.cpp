@@ -824,6 +824,17 @@ W3DMaterialResult W3DMaterialFactory::Create(const MeshRenderData &mesh, const M
 	{
 		if (tex[s].empty()) continue;
 		key.Tex[s] = true;
+		// notre version (S-026) : avec le dégradé BUMPENVMAP, l'étage 0 est une carte de relief V8U8 (BFME1 : art\\textures\\lm_ocean02.dds), pas une couleur : D3D l'emploie à
+		// décaler la lecture de l'étage 1 et passe la couleur diffuse (shader.cpp de ZH). Le décalage n'est pas dessiné ; l'étage 0 vaut donc blanc, et non la magenta d'une texture manquante
+		if (s == 0 && surf.Kind == MATERIAL_CLASSIC && (surf.State.PriGradient == W3D_GRADIENT_BUMPENVMAP || surf.State.PriGradient == W3D_GRADIENT_BUMPENVMAPLUMINANCE))
+		{
+			Ref<Image> white = Image::create_empty(1, 1, false, Image::FORMAT_RGBA8);
+			white->fill(Color(1, 1, 1, 1));
+			textures[s] = ImageTexture::create_from_image(white);
+			found[s] = true;
+			out.Notes.push_back("[S-026] bump map " + tex[s] + " of stage 0: the offset of stage 1's lookup is not drawn");
+			continue;
+		}
 		textures[s] = loadTextures ? Load_Texture(tex[s], out.Errors, found[s], false, &out.Notes) : Placeholder_Texture(false);
 		if (hasInfo[s])
 		{

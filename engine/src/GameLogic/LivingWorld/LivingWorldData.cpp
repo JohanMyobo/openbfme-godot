@@ -1049,7 +1049,7 @@ const std::vector<std::string> &LivingWorldStores::blockKeywords() const
 std::vector<std::string> LivingWorldStores::acceptanceStops() const
 {
 	if (!m_bfme1Data) return {};
-	return { "[S-5017] BFME1 Living World campaigns and saves are unavailable: campaign blocks use recording stubs, not the BFME2/RotWK War of the Ring parsers; field validation and exact nested block boundaries are unverified" };
+	return { "[S-5017] BFME1 Living World campaigns run through GameLogic/LivingWorld/ActCampaign.h, not these stores: here their blocks use recording stubs, not the BFME2/RotWK War of the Ring parsers. The campaign saves, the world screen's Apt interface and the region missions' SkirmishOpponent sides are not ported" };
 }
 
 void LivingWorldStores::registerBlocks(INIBlockRegistry &registry)

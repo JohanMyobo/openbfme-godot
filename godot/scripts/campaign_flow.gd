@@ -56,6 +56,9 @@ var campaign_ready := false  # + 0xD2 (Node has its own "ready")
 var advanced := false
 ## lane BFME2CAMP1: the campaign's carry-over (the engine's CampaignCarryover::State text; "" none): the units and the player's data the next mission gets
 var carryover := ""
+var act_map: Node = null     # notre version : BFME1, l'écran du monde (scripts/act_campaign.gd) qui a lancé cette mission de région ; sans lui, une campagne linéaire
+var region_map := ""         # sa carte
+var region_options := {}     # { map, display_name, still, music, voice, movie, difficulty }
 var score_pending := false  # the score screen of a campaign game is up: its Continue runs RW 0x927EC6
 var menu_open := false      # CampaignMenu.apt is up (between missions)
 var menu_log: Array = []    # [ "<event> ..." ] for the scripted checks: "menu <campaign> <index> won|lost", "auto_save <path>", "bonus_unlock ..."
@@ -108,6 +111,42 @@ func start(name: String, diff: int) -> void:
 		if String(c.name).to_upper() == name.to_upper():
 			await play_movie(String(c.intro_movie))
 	await begin_mission()
+
+
+## notre version : une mission d'une région de BFME1. TARGET FACTS : la région donne MapName, SkirmishStillImage, SkirmishMusicTrack, SkirmishVoiceTrack, le film
+## MovieNameFirstTime / MovieNameRepeat (table 0x1116D70). INFERENCE : même ordre qu'une mission de RotWK (écran de chargement avec son image et sa musique, puis le film).
+## S-5017 : l'écran ScoreScreen.apt, la sauvegarde et les adversaires SkirmishOpponent ne sont pas portés.
+func begin_region_mission(map_screen: Node, options: Dictionary) -> void:
+	act_map = map_screen
+	region_options = options
+	region_map = String(options.map)
+	tutorial = ""
+	campaign = ""
+	mission = 0
+	difficulty = int(options.difficulty)
+	victorious = false
+	menu_open = false
+	score_pending = false
+	_end_timer_ran = false
+	_end_frame = -1
+	active = true
+	begun += 1
+	print("CAMPAIGN region mission: %s" % region_map)
+	if not await show_load_screen({"load_screen_music": String(options.music), "load_screen_image": String(options.still)}):
+		return
+	if not String(options.voice).is_empty():
+		game._audio.play_sound(String(options.voice)) # SkirmishVoiceTrack
+	var rep: Dictionary = world.start_region_mission({"map": region_map, "difficulty": difficulty, "progress": Callable(game, "_on_load_progress"), "test_hooks": hooks})
+	game._report = rep
+	print("CAMPAIGN load ok=%s errors=%s" % [rep.ok, str(rep.get("errors", []).slice(0, 5))])
+	if not rep.ok:
+		game._fail("start_region_mission failed")
+		return
+	if movies and not String(options.movie).is_empty():
+		game._audio.stop_music(false)
+		await play_movie(String(options.movie))
+	enter_mission(rep)
+	game._game_kind = "region %s" % region_map
 
 
 ## lane CAMP-1H: a campaign movie (awaited; nothing when --movies=off or the title is empty)
@@ -298,14 +337,18 @@ func tick() -> void:
 		_ended_at = Time.get_ticks_msec()
 		_end_frame = int(st.frame)
 		var line := ""
-		if not tutorial.is_empty():
+		if act_map != null:
+			line = "region %s %s %d" % [region_map, "victory" if st.victory else "defeat", st.frame]
+		elif not tutorial.is_empty():
 			line = "tutorial %s %s %d" % [tutorial, "victory" if st.victory else "defeat", st.frame] # lane BFME2CAMP1: no campaign to step
 		else:
 			var missions := missions_of(campaign)
 			line = "%s %d %s %s %d" % [campaign, mission, missions[mission].map, "victory" if st.victory else "defeat", st.frame]
 		ended_log.append(line)
 		print("CAMPAIGN end: ", line, " (", st.action, ")")
-		if st.victory and tutorial.is_empty():
+		if act_map != null:
+			victorious = bool(st.victory)
+		elif st.victory and tutorial.is_empty():
 			step("won") # RW 0x5EBAEE: + 0xD0
 	# lane CAMPSAVE-1: the end-game timer (RW 0x602FFE: 25 logic frames after VICTORY / DEFEAT) leaves the game for the score screen, as in a skirmish
 	# (the end sequence's own request, end_timer_ran, or the frame count); lane CAMP-1H: an exit movie (PLAY_MOVIE_IN_GAME) plays to its end first
@@ -331,7 +374,7 @@ func leave_to_score_screen() -> void:
 		return
 	active = false
 	_cine = null
-	if tutorial.is_empty():
+	if tutorial.is_empty() and act_map == null:
 		step("game_over")
 	score_pending = true
 	print("CAMPAIGN the game is left for the score screen (%s %s; the campaign's mission index is now %d)" % [campaign, "won" if victorious else "lost", mission])
@@ -345,6 +388,13 @@ func restart_mission() -> void:
 	game._close_quit_menu()
 	active = false
 	_cine = null
+	if act_map != null:
+		# notre version : la même carte, sans le film (une mission rejouée, comme RW 0x5EC5D1)
+		var again := region_options.duplicate()
+		again.movie = ""
+		game._tear_down_game("restart")
+		await begin_region_mission(act_map, again)
+		return
 	if not tutorial.is_empty():
 		# lane BFME2CAMP1 (Sol review m4): no campaign: RW 0x9220DE's other branch starts a new game of the same map (GlobalData + 0xC) in the same
 		# mode (GameLogic + 0x110: the tutorial's 6)
@@ -363,6 +413,9 @@ func restart_mission() -> void:
 ## the score screen's Continue in a campaign game: RW 0x926E0A (TimeLine's destructor, type 1) -> RW 0x927EC6
 func after_score() -> void:
 	score_pending = false
+	if act_map != null:
+		act_map.mission_over(victorious) # notre version : BFME1 revient à l'écran du monde
+		return
 	if not tutorial.is_empty():
 		# lane BFME2CAMP1: a tutorial (mode 6) ends on the single player score screen (RW 0x927898 type 1); with no campaign the menu comes back
 		print("CAMPAIGN tutorial %s over: back to the main menu" % tutorial)
@@ -587,7 +640,7 @@ func auto_menu_tick() -> void:
 ## mission to mission (the full playthroughs are the C++ tests, test_camp1_missions.cpp)
 func _auto_win_tick() -> void:
 	var f: int = world.get_frame()
-	var map: String = String(missions_of(campaign)[mission].map).to_lower()
+	var map: String = region_map.to_lower() if act_map != null else String(missions_of(campaign)[mission].map).to_lower()
 	if map.ends_with("bonus"):
 		# the Witch King is found first (NAMED_DISCOVERED: his dialogue and objective 6), then defeated
 		if _win_step == 0 and f >= 120:
