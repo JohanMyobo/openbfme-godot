@@ -105,7 +105,7 @@ TEST_CASE("logic settings: fields no row reads and nested blocks are consumed an
 		"End\n";
 	REQUIRE_MESSAGE(L::scanAIData(text, g, &err), err);
 	CHECK_FALSE(g.enableRepulsors);
-	CHECK(g.unappliedFields.count("AIData.Wealthy") == 1);
+	CHECK(g.unappliedFields.count("AIData.Wealthy") == 0); // notre version : le rang est lu (la production d'équipes de BFME1, AIPlayerTeams)
 	CHECK(g.unappliedFields.count("AIData.SideInfo") == 1);
 	CHECK(g.unappliedFields.count("AIData.SkirmishBuildList") == 1);
 	// lane TARGET-1: the AttackPriority block has its own row (RW 0x70153B): read, not recorded

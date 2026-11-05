@@ -3,6 +3,7 @@
 // See GameLogic/ScriptEngine/ScriptConditions.h.
 
 #include "GameLogic/ScriptEngine/ScriptConditions.h"
+#include "GameLogic/AI/AIPlayerTeams.h"
 #include "GameLogic/Module/EmotionModules.h"
 #include "GameLogic/Module/GateModules.h"
 
@@ -549,7 +550,16 @@ std::vector<Player *> ScriptConditions::players(ScriptEngine &engine, const std:
 	}
 	else if (p == "<This Player's Enemy>")
 	{
-		engine.note("[S-1180] the player parameter <This Player's Enemy> (RW 0x758AB1) is not ported");
+		// RW 0x758AB1 : Player::getCurrentEnemy (RW 0x6AA5F5) du joueur courant ; notre version : l'AIPlayer de BFME1 (AIPlayerTeams), sinon non porté
+		Player *enemy = engine.currentPlayer() && engine.logic().aiTeams().enabled() ? engine.logic().aiTeams().currentEnemy(*engine.currentPlayer()) : nullptr;
+		if (enemy)
+		{
+			out.push_back(enemy);
+		}
+		else if (!engine.logic().aiTeams().enabled())
+		{
+			engine.note("[S-1180] the player parameter <This Player's Enemy> (RW 0x758AB1) is not ported");
+		}
 	}
 	else if (p == "<Local Player>")
 	{
@@ -602,6 +612,20 @@ bool ScriptConditions::inTypeSet(ScriptEngine &engine, const std::string &parame
 		return std::find(list->begin(), list->end(), templateName) != list->end();
 	}
 	return parameter == templateName;
+}
+
+CastleBehavior *ScriptConditions::castleOf(GameLogic &logic, Object &obj)
+{
+	if (CastleBehavior *cb = dynamic_cast<CastleBehavior *>(obj.findModule("CastleBehavior"))) // RW 0x797AC1 + RW 0x68BDA5
+	{
+		return cb;
+	}
+	// notre version : le déploiement donne le nom du drapeau au donjon (RW 0x79C0FD) ; en BFME1 les scripts de l'IA visent ce nom pour bâtir
+	// (SET_UNIT_REFERENCE(AI_CURRENT_CONSTRUCTION_SITE, BASE_FLAG_n)), le CastleMemberBehavior du donjon mène au camp
+	const CastleMemberBehavior *member = obj.getTemplate() && obj.getTemplate()->bfme1Data() ?
+		dynamic_cast<const CastleMemberBehavior *>(obj.findModule("CastleMemberBehavior")) : nullptr;
+	Object *castle = member && member->castleId() != INVALID_ID ? logic.findObjectByID(member->castleId()) : nullptr;
+	return castle ? dynamic_cast<CastleBehavior *>(castle->findModule("CastleBehavior")) : nullptr;
 }
 
 Team *ScriptConditions::team(ScriptEngine &engine, const std::string &name, bool create)
@@ -700,6 +724,11 @@ std::int32_t ScriptConditions::countPlayerObjects(GameLogic &logic, const Player
 bool ScriptConditions::equivalentTemplates(const ThingTemplate *a, const ThingTemplate *b)
 {
 	return equivalentTemplatesImpl(a, b);
+}
+
+bool ScriptConditions::teamHasAnyUnits(const Team &t)
+{
+	return ::teamHasAnyUnits(t);
 }
 
 // RW 0x96E85F: a type parameter names an object list of the engine (RW 0x759158) or one type; the names, in order
@@ -1357,7 +1386,7 @@ bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 		{
 			return false;
 		}
-		if (const CastleBehavior *cb = dynamic_cast<const CastleBehavior *>(unit->findModule("CastleBehavior")))
+		if (const CastleBehavior *cb = castleOf(logic, *unit)) // notre version : le donjon d'un camp de BFME1 mène à son camp
 		{
 			if (cb->state() != CastleBehavior::STATE_UNPACKED)
 			{
@@ -1407,7 +1436,7 @@ bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 		{
 			return false;
 		}
-		const CastleBehavior *castle = dynamic_cast<const CastleBehavior *>(unit->findModule("CastleBehavior"));
+		const CastleBehavior *castle = castleOf(logic, *unit); // notre version : le donjon d'un camp de BFME1 mène à son camp
 		if (castle && castle->canUnpack(true) && castle->isPlayerAllowedToPackOrUnpack(player) && castle->canAffordUnpack(player))
 		{
 			return true;
@@ -2014,7 +2043,7 @@ bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 		{
 			return false;
 		}
-		const CastleBehavior *cb = dynamic_cast<const CastleBehavior *>(unit->findModule("CastleBehavior"));
+		const CastleBehavior *cb = castleOf(logic, *unit); // notre version : le donjon d'un camp de BFME1 mène à son camp
 		return cb && cb->canBuildAtBase(tt);
 	}
 	case PLAYER_HAS_NUM_UNITS_WITH_UPGRADE:
@@ -2040,7 +2069,14 @@ bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 		return count >= param(c, 1).intValue;
 	}
 	default:
+	{
+		bool result = false;
+		if (ScriptActions::evaluateBaseCondition(engine, c, t->name, result)) // notre version : l'IA de BFME1
+		{
+			return result;
+		}
 		engine.noteUnportedCondition(t->name);
 		return false;
+	}
 	}
 }

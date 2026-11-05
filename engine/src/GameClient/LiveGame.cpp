@@ -37,7 +37,9 @@
 #include "Common/GameCommon.h"
 #include "Common/NumericState.h"
 #include "GameClient/MapClassification.h"
+#include "Common/BfmeGame.h"
 #include "GameClient/MapScriptSetup.h"
+#include "GameLogic/AI/AIPlayerTeams.h"
 #include "GameLogic/NewGame/SkirmishSides.h"
 #include "GameLogic/Economy.h"
 #include "GameLogic/VictoryConditions.h"
@@ -885,6 +887,7 @@ bool LiveGame::setupMapScripts(const Options &options, const SidesList &sidesUse
 	{
 		return false;
 	}
+	m_logic->aiTeams().newGame(isBfme1Data(m_fs)); // notre version : la production d'équipes de l'IA BFME1 (AIPlayerTeams.h)
 	m_scriptHost = std::make_unique<LiveGameScriptHost>(*this, *m_logic, m_ai.get(), m_world.audio(), m_fs);
 	ScriptEngine &engine = m_logic->scriptEngine();
 	engine.setHost(m_scriptHost.get());

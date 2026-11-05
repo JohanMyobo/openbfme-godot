@@ -735,7 +735,9 @@ TEST_CASE("BACKLOG2 r1 determinism: three units on a build site: the draw assign
 	// in the mover hash)
 	// merge queue q38 (measured once on the merged tree and at LOCODIST-1's merge point; goals unchanged): 0xE4523180 -> 0x45726314 (the retail locomotor
 	// distance to the goal, RW 0x664127, moves when the units arrive)
-	CHECK(a.hashes.back() == 0x45726314U);   // q19: BACKLOG-8 hashes the formation and march rows of AIData / GameData in GameLogicSettings::crc (unconditionally) and moves the march;
+	// notre version (IA de BFME1, mesuré sur macOS arm64 ; objectifs et positions inchangés) : 0x45726314 -> 0x3B296455 : les scripts d'IA de la scène lancent
+	// CREATE_REINFORCEMENT_TEAM_AT_UNIT_POSITION (RW 0x7CB391, 8 fois), non portée avant ; la couper redonne l'ancienne valeur (vérifié)
+	CHECK(a.hashes.back() == 0x3B296455U);   // q19: BACKLOG-8 hashes the formation and march rows of AIData / GameData in GameLogicSettings::crc (unconditionally) and moves the march;
 	                                         // re-measured on the merged tree (a CI host); was 0x78A9CB12 (q18: DEVPORT-3C castle keep gate / Horde removal record, before 0x2BD4804B); goals and positions unchanged
 	// every unit left the spot it stood on
 	CHECK(a.positions[0] != a.goals[0]);

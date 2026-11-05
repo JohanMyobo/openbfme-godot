@@ -344,6 +344,14 @@ const FieldParse kAIDataFields[] = {
 	{ "MeleeApproachDist", parseNoting<INI::parseReal>, 0, (int)offsetof(BlockState, values.meleeApproachDist) },
 	{ "CastleSiegeStandBackDistance", parseNoting<INI::parseReal>, 0, (int)offsetof(BlockState, values.castleSiegeStandBackDistance) },
 	{ "HordesWaitForHordes", parseNoting<INI::parseBool>, 0, (int)offsetof(BlockState, values.hordesWaitForHordes) },
+	// notre version : les rangs de production d'équipes (RW 0xC1CB30 .. 0xC1CBB0)
+	{ "TeamSeconds", parseNoting<INI::parseReal>, 0, (int)offsetof(BlockState, values.teamSeconds) },
+	{ "Wealthy", parseNoting<INI::parseInt>, 0, (int)offsetof(BlockState, values.aiWealthy) },
+	{ "Poor", parseNoting<INI::parseInt>, 0, (int)offsetof(BlockState, values.aiPoor) },
+	{ "TeamsWealthyRate", parseNoting<INI::parseReal>, 0, (int)offsetof(BlockState, values.teamsWealthyRate) },
+	{ "TeamsPoorRate", parseNoting<INI::parseReal>, 0, (int)offsetof(BlockState, values.teamsPoorRate) },
+	{ "TeamResourcesToStart", parseNoting<INI::parseReal>, 0, (int)offsetof(BlockState, values.teamResourcesToStart) },
+	{ "MaxRecruitRadius", parseNoting<INI::parseReal>, 0, (int)offsetof(BlockState, values.maxRecruitRadius) },
 	{ nullptr, noteUnapplied, nullptr, 0 }
 };
 const FieldParse kMultiplayerFields[] = {

@@ -253,6 +253,8 @@ public:
 			m_state = STATE_UNPACKED;
 		}
 	}
+	// RW 0x79A688 : l'emplacement libre le plus proche (mode 0) ou le plus loin (mode 1) de pos le bâtit ; autre mode : rien
+	Object *preBuildNear(const ThingTemplate &tt, const Coord3D &pos, int mode);
 	// lane CASTLE-1: the stop lines S-950 .. S-952 (in GameLogic::report through BuildStops)
 	static std::vector<std::string> stopLines();
 	// ---- lane CASTLEAREA-1: the castle's areas (see the file comment) ----

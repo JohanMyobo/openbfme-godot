@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+class CastleBehavior;
 class Object;
 class Player;
 class ScriptEngine;
@@ -49,6 +50,8 @@ public:
 	// lane SCRIPT-4: RW 0x778EA0: a template name in a type parameter's set (an object list, else the one name; case kept)
 	static bool inTypeSet(ScriptEngine &engine, const std::string &parameter, const std::string &templateName);
 	// a team by its (side-qualified) name, ZH ScriptEngine::getTeamNamed (RW 0x759FDA); "<This Team>" is the team script's team, else the condition team
+	// notre version : le CastleBehavior de l'objet, ou en BFME1 celui du camp dont l'objet est le donjon (son CastleMemberBehavior)
+	static CastleBehavior *castleOf(GameLogic &logic, Object &obj);
 	static Team *team(ScriptEngine &engine, const std::string &name, bool create = false); // lane CAMP-1H: `create` (RW 0x759FDA's flag)
 	// RW 0x70CF29
 	static bool pointInTrigger(const TriggerArea &t, float x, float y);
@@ -69,4 +72,6 @@ public:
 	// RW 0x7A0ECD: the mean position of EVERY member (dead ones too), each axis summed in member order, times 1 / n; false for an empty team (retail divides
 	// by zero there)
 	static bool teamCentreAllMembers(const Team &t, Coord3D &out);
+	// RW 0x7A0956(0) : un membre vivant, pas DESTROYED, ni PROJECTILE / INERT / IGNORE_FOR_VICTORY
+	static bool teamHasAnyUnits(const Team &t);
 };

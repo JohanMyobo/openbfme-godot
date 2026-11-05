@@ -12,6 +12,7 @@ list(APPEND OPENBFME_SIM_SOURCES
     src/GameLogic/ScriptEngine/ScriptActionsOrders.cpp
     src/GameLogic/AI/AIGuardCommands.cpp
     src/GameLogic/Object/ObjectCommandButton.cpp
+    src/GameLogic/ScriptEngine/ScriptActionsBase.cpp
     src/GameLogic/AI/AIHunt.cpp
     src/GameLogic/AI/AIWaypointPath.cpp
     src/GameClient/MapScriptSetup.cpp

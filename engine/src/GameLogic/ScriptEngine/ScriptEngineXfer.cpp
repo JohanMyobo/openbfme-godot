@@ -600,6 +600,8 @@ void ScriptEngine::xfer(Xfer &x)
 		m_audioTimers = std::move(std::get<8>(*staged));
 		m_triggeredSpecialPowers = std::move(std::get<9>(*staged)); // lane SAVE-4e
 		m_references = std::move(std::get<10>(*staged));             // lane CASTLE-UNPACK
+		m_unitThreat.clear(); // notre version (IA BFME1) : la mémoire de 5 s de la menace n'est pas sauvegardée
+		m_teamThreat.clear();
 		m_completedUpgrades = std::move(std::get<11>(*staged));      // lane MODCOMPAT-AI
 		if (priorities) // lane BFME2CAMP1: the table checked above (every name a template of this game)
 		{

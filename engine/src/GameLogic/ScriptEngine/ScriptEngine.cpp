@@ -5,6 +5,7 @@
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
 
 #include "Common/Crc32.h"
+#include "Common/GameCommon.h"
 #include "Common/Player.h"
 #include "Common/PlayerList.h"
 #include "Common/StateHash.h"
@@ -12,9 +13,11 @@
 #include "Common/Xfer.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/BehaviorModule.h"
+#include "GameLogic/Object/Contain/HordeContainRuntime.h"
 #include "GameLogic/Module/EmotionModules.h"
 #include "GameLogic/Object/PartitionManager.h"
 #include "GameLogic/AI/AIHunt.h"
+#include "GameLogic/AI/AIPlayerTeams.h"
 #include "GameLogic/AI/AIWaypointPath.h"
 #include "GameClient/MapChunks.h"
 #include "GameLogic/GameLogic.h"
@@ -25,6 +28,7 @@
 #include "Common/Thing/ThingFactory.h"
 #include "GameLogic/ObjectTemplateInfo.h"
 #include "GameLogic/SimMath.h"
+#include "GameLogic/SkirmishAI/AIThreatFinder.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -124,6 +128,8 @@ void ScriptEngine::reset()
 	m_flags.clear();
 	m_namedObjects.clear();
 	m_references.clear();
+	m_unitThreat.clear();
+	m_teamThreat.clear();
 	m_objectLists.clear();
 	m_triggers = nullptr;
 	m_runtimeTriggers.clear(); // lane HUD-5
@@ -382,6 +388,27 @@ ScriptEngine::RGroup *ScriptEngine::findGroup(const std::string &name)
 	const std::pair<std::string, std::string> q = qualify(name);
 	RSide *side = findSide(q.first);
 	return side ? findGroupIn(side->root, q.second) : nullptr;
+}
+
+bool ScriptEngine::evaluateProductionCondition(Player &player, const std::string &name)
+{
+	RSide *side = findSide(player.getPlayerName());
+	RScript *script = side ? findScriptIn(side->root, name) : nullptr;
+	if (!script || !script->def)
+	{
+		return false;
+	}
+	Player *const savedPlayer = m_currentPlayer;
+	Team *const savedTeam = m_thisTeam;
+	const std::string savedSide = m_currentSide;
+	m_currentPlayer = &player;
+	m_thisTeam = nullptr;
+	m_currentSide = player.getPlayerName();
+	const bool r = evaluateConditionsNoContext(*script->def);
+	m_currentPlayer = savedPlayer;
+	m_thisTeam = savedTeam;
+	m_currentSide = savedSide;
+	return r;
 }
 
 bool ScriptEngine::scriptActive(const std::string &name) const
@@ -696,6 +723,67 @@ Object *ScriptEngine::getUnitNamed(const std::string &name) const
 		}
 	}
 	return nullptr;
+}
+
+namespace
+{
+// RW 0x69609F / 0x7A5B03 : ThePartitionManager autour du centre, en 2D (FROM_CENTER_2D), les filtres ENEMIES de `ref` (RW 0xC11DC0, masque 1), vivant
+// (RW 0xC10E20) ; la somme x87 des valeurs de menace (RW 0x68F0EC, fadd puis fstp dword)
+float threatAround(GameLogic &logic, const Object &ref, const Coord3D &centre, float radius)
+{
+	PartitionFilterFn enemies([&ref](Object &o) { return ref.getRelationship(o) == ENEMIES; });
+	PartitionFilterFn alive([](Object &o) { return !o.isEffectivelyDead(); });
+	float sum = 0.0f;
+	for (const PartitionHit &h : logic.partition().iterateObjectsInRange(centre, radius, FROM_CENTER_2D, { &enemies, &alive }, ITER_FASTEST))
+	{
+		sum = SimMath::fstpDword(SimMath::pc24AddW(AIThreatFinder::threatValueWide(*h.object), (double)sum));
+	}
+	return sum;
+}
+
+UnsignedInt threatExpiry(GameLogic &logic)
+{
+	return logic.getFrame() + 5u * (UnsignedInt)LOGICFRAMES_PER_SECOND; // RW 0x68C7C1(5000) : 5000 / 1000 * images par seconde
+}
+} // namespace
+
+float ScriptEngine::unitThreat(Object &obj, float radius)
+{
+	auto &e = m_unitThreat[obj.getID()];
+	if (e.first == 0 || e.first < m_logic.getFrame())
+	{
+		e = { threatExpiry(m_logic), threatAround(m_logic, obj, *obj.getPosition(), radius) };
+	}
+	return e.second;
+}
+
+float ScriptEngine::teamThreat(Team &team, float radius)
+{
+	// RW 0x7A5B03 : le centre de l'équipe (RW 0x7A0ECD) et un membre pour la relation (RW 0x66362D) ; sans membre la valeur reste la précédente
+	const std::vector<Object *> live = ScriptConditions::members(team);
+	const Object *ref = nullptr;
+	Coord3D centre{ 0.0f, 0.0f, 0.0f };
+	int n = 0;
+	for (Object *o : live)
+	{
+		if (o->isEffectivelyDead() || o->isDestroyed())
+		{
+			continue;
+		}
+		ref = ref ? ref : o;
+		centre.x = SimMath::sseAdd(centre.x, o->getPosition()->x);
+		centre.y = SimMath::sseAdd(centre.y, o->getPosition()->y);
+		centre.z = SimMath::sseAdd(centre.z, o->getPosition()->z);
+		++n;
+	}
+	auto &e = m_teamThreat[team.getID()];
+	if (ref && (e.first == 0 || e.first < m_logic.getFrame()))
+	{
+		const float inv = SimMath::sseDiv(1.0f, SimMath::sseFromInt32(n));
+		centre = { SimMath::sseMul(inv, centre.x), SimMath::sseMul(inv, centre.y), SimMath::sseMul(inv, centre.z) };
+		e = { threatExpiry(m_logic), threatAround(m_logic, *ref, centre, radius) };
+	}
+	return e.second;
 }
 
 bool ScriptEngine::didUnitExist(const std::string &name) const
@@ -1742,6 +1830,12 @@ void ScriptEngine::updateTeamStates()
 			{
 				updateTeamState(*t);
 			}
+			// notre version : RW 0x7A67A5 .. 0x7A6809. Retail le fait dans tous les jeux ; gardé ici à BFME1 (l'IA y dépend) : sur RotWK, Carn Dum passe de 14 à 132
+			// scripts OnCreate (une équipe vide recréée puis supprimée en boucle ?), écart non expliqué, à reprendre avant d'ouvrir ce chemin à RotWK
+			if (m_logic.aiTeams().enabled())
+			{
+				players.teams().deleteDeadTeams(*proto, players);
+			}
 		}
 	}
 }
@@ -1936,11 +2030,31 @@ void ScriptEngine::updateTeamState(Team &t)
 	// (RW 0x7A59CB, a threat record)
 }
 
-// RW 0x7A09E4: a team flagged + 0x112 (built by an AIPlayer, not ported: never set here) waits until no member is mid-creation (RW 0x44DDEC(2)) and every
-// HORDE member's horde has members and is complete (horde slots 0xA4 / 0x9C)
+// RW 0x7A09E4 : une équipe marquée + 0x112 (bâtie par un AIPlayer, RW 0x79FE29) attend qu'aucun membre ne soit en construction (RW 0x44DDEC(2), le statut + 0x94
+// bit 2) et que chaque membre HORDE (template + 0x115 bit 0x20) ait une horde (contain + 0x258, vslot 0x7C) non vide (slot 0x180(0), RW 0x8706DF : le compte plus
+// les membres en chemin). INFERENCE : le test suivant (slot 0xA4 RW 0x86F93F vrai et slot 0x9C RW 0x86F9CA faux -> pas prête) ne peut pas conclure : les deux
+// parcourent la même liste (interface + 0x54) et 0xA4 n'est vrai que s'il y trouve un objet vivant, ce qui rend 0x9C vrai ; il n'est donc pas repris
 bool ScriptEngine::teamReady(const Team &t) const
 {
-	return !t.scriptState().wasBuilt;
+	if (!t.scriptState().wasBuilt)
+	{
+		return true;
+	}
+	static const int kHorde = ObjectTemplateInfoBuilder::kindOfIndex("HORDE");
+	for (Object *o = t.getFirstMember(); o; o = o->friend_teamNext())
+	{
+		if (o->isUnderConstruction())
+		{
+			return false;
+		}
+		ContainModuleInterface *contain = o->isKindOf((unsigned)kHorde) ? o->getContain() : nullptr;
+		HordeContainInterface *horde = contain ? contain->getHordeContainInterface() : nullptr;
+		if (horde && contain->getContainCount() + horde->membersEntering().size() == 0)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 // RW 0x7A12F4: a team with an owner gives its members to the owner's default team (RW 0x7A0F74, not to itself); without an owner (+ 8 of the prototype)

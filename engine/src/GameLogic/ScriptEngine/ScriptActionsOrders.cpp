@@ -82,7 +82,9 @@
 // name (S-1190).
 
 #include "GameLogic/ScriptEngine/ScriptActions.h"
+#include "Common/BuildAssistant.h"
 #include "Common/PlayerHeroList.h"
+#include "GameLogic/AI/AIPlayerTeams.h"
 #include "GameLogic/AI/AIWorld.h"
 #include "GameLogic/AI/AIPathfind.h"
 #include "GameLogic/ExperienceLevels.h"
@@ -117,6 +119,7 @@
 #include "GameLogic/ScriptEngine/ScriptEngine.h"
 #include "GameLogic/SimMath.h"
 
+#include <limits>
 #include <map>
 #include <string>
 #include <vector>
@@ -243,6 +246,53 @@ Coord3D teamCentreLiving(const Team &t)
 		c.z = SimMath::sseMul(inv, c.z);
 	}
 	return c;
+}
+
+// notre version : un paramètre KINDOF (27) : le bit du nom que porte la chaîne (ZH Parameter::readParameter le convertit au chargement,
+// KindOfMaskType::getSingleBitFromName), l'entier quand la chaîne est vide ; -1 pour un nom inconnu (aucun objet ne l'a)
+int kindOfParam(const ScriptParameter &p)
+{
+	return p.stringValue.empty() ? p.intValue : ObjectTemplateInfoBuilder::kindOfIndex(p.stringValue.c_str());
+}
+
+// notre version : RW 0x6ABC10 Player::findClosestByKindOf(pos, {bit}, KINDOFMASK_NONE) : Player::iterateObjects (RW 0x6ABABD : ses prototypes
+// (+ 0x34C), leurs équipes depuis la tête (+ 0x334, la plus récente), leurs membres) et le rappel RW 0x6AADB6 : un objet du bit (RW 0x70C4FE), sa
+// distance 2D au carré (RW 0x66137C, x87 large) strictement sous la meilleure (FLT_MAX au départ, RW 0xBD1910) le prend. INFERENCE : les
+// prototypes du joueur dans l'ordre de la fabrique
+Object *closestOfKindOf(GameLogic &logic, Player &player, const Coord3D &pos, int bit)
+{
+	Object *best = nullptr;
+	float bestDist = std::numeric_limits<float>::max();
+	if (bit < 0)
+	{
+		return nullptr;
+	}
+	for (const auto &proto : logic.players().teams().prototypes())
+	{
+		if (proto->getControllingPlayer() != &player)
+		{
+			continue;
+		}
+		for (auto it = proto->teams().rbegin(); it != proto->teams().rend(); ++it)
+		{
+			for (Object *o : ScriptConditions::members(**it))
+			{
+				if (!o->isKindOf((unsigned)bit))
+				{
+					continue;
+				}
+				const Coord3D *q = o->getPosition();
+				const double dx = SimMath::pc24SubW((double)q->x, (double)pos.x), dy = SimMath::pc24SubW((double)q->y, (double)pos.y);
+				const double d = SimMath::pc24AddW(SimMath::pc24MulW(dy, dy), SimMath::pc24MulW(dx, dx));
+				if ((double)bestDist > d)
+				{
+					best = o;
+					bestDist = (float)d; // fst dword
+				}
+			}
+		}
+	}
+	return best;
 }
 
 // the partition's closest object of the template (RW 0xA39090: FROM_CENTER_2D within 1e6), owned by `owner` when there is one
@@ -561,6 +611,129 @@ bool ScriptActions::executeOrderAction(ScriptEngine &engine, const ScriptActionR
 		{
 			AIGroup group(logic, idsOf(teamAIGroup(*t)));
 			group.groupMoveToPosition(*best->getPosition(), false, CMD_FROM_SCRIPT); // RW 0x774897
+		}
+		return true;
+	}
+	if (name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF" || name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF_OWNED_BY_PLAYER")
+	{
+		// notre version : TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF (équipe, kindof) 391 -> RW 0x7C2CF5 et _OWNED_BY_PLAYER (équipe, kindof, joueurs) 392 ->
+		// RW 0x7C2E34 : comme le type : le centre de l'équipe (RW 0x7A0ECD) ; les joueurs du paramètre (RW 0x75968D), ou tous (le masque 0xFFFFF, RW 0x7C2D3F) ;
+		// le plus proche de chacun (RW 0x6ABC10) ; puis le plus proche à la longueur 3D (RW 0x403111 ; le premier trouvé, puis strictement plus proche)
+		Team *t = ScriptConditions::team(engine, param(a, 0).stringValue);
+		Coord3D c;
+		if (!t || !ScriptConditions::teamCentreAllMembers(*t, c))
+		{
+			return true;
+		}
+		std::vector<Player *> candidates;
+		if (name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF")
+		{
+			for (int i = 0; i < logic.players().getPlayerCount(); ++i)
+			{
+				if (Player *p = logic.players().getNthPlayer(i))
+				{
+					candidates.push_back(p);
+				}
+			}
+		}
+		else
+		{
+			candidates = ScriptConditions::players(engine, param(a, 2).stringValue);
+		}
+		const int bit = kindOfParam(param(a, 1));
+		Object *best = nullptr;
+		float bestDist = 99999.0f; // RW 0xBDF350 (the first hit always wins: `best` is null)
+		for (Player *p : candidates)
+		{
+			Object *o = closestOfKindOf(logic, *p, c, bit);
+			if (!o)
+			{
+				continue;
+			}
+			const float d = SimMath::fstpDword(SimMath::length3d(SimMath::sseSub(o->getPosition()->x, c.x), SimMath::sseSub(o->getPosition()->y, c.y),
+				SimMath::sseSub(o->getPosition()->z, c.z))); // Coord3D::length
+			if (!best || d < bestDist)
+			{
+				best = o;
+				bestDist = d;
+			}
+		}
+		if (best)
+		{
+			AIGroup group(logic, idsOf(teamAIGroup(*t)));
+			group.groupMoveToPosition(*best->getPosition(), false, CMD_FROM_SCRIPT); // RW 0x774897
+		}
+		return true;
+	}
+	if (name == "TEAM_RECRUIT_UNITS")
+	{
+		// notre version : TEAM_RECRUIT_UNITS (équipe, nombre, type) 397 -> RW 0x7C2BFB : l'équipe (RW 0x759FDA), le modèle (RW 0x6D1305) et la liste de types
+		// (RW 0x759158) du même nom ; le rayon : MaxRecruitRadius (AIData + 0x5C) quand l'équipe a une unité (RW 0x7A0956(0)), sinon 1000000.0
+		// (RW 0xBDCDC0) ; Team::recruitUnits RW 0x7A491C (modèle, liste, nombre, rayon) : autour du centre de l'équipe (RW 0x7A02E1), autant de fois que
+		// le nombre, l'objet le plus proche (distance 2D au carré, une égalité prend le dernier) parmi tous les objets du joueur de l'équipe : du modèle
+		// (RW 0x73D5C2, ou la liste RW 0x7A407A du modèle le nomme) ou de la liste (RW 0x778EA0) ; hors de cette équipe ; son équipe active (+ 0x5D),
+		// de priorité de production (prototype + 0x21C) plus basse que celle de cette équipe, recrutable (l'équipe par défaut, ou teamIsAIRecruitable
+		// + 0x210, sauf le réglage de l'équipe + 0x110 / + 0x111) ; son IA recrutable (+ 0x3BE) ; pas HELD (+ 0x1C8 bit 3) ; il rejoint l'équipe
+		// (RW 0x69954A) et le rayon repart du sien. INFERENCE : le réglage + 0x110 / + 0x111 n'a pas d'écrivain porté ; l'IA recrutable (+ 0x3BE) : son
+		// seul écrivain, UNIT_AFFECT_OBJECT_PANEL_FLAGS AI_Recruitable, n'est pas porté (S-1186) : toujours vraie
+		Team *team = ScriptConditions::team(engine, param(a, 0).stringValue);
+		TeamPrototype *mine = team ? team->getPrototype() : nullptr;
+		Player *owner = team ? team->getControllingPlayer() : nullptr;
+		if (!mine || !owner)
+		{
+			return true;
+		}
+		const ThingTemplate *tt = logic.things().findTemplate(param(a, 2).stringValue);
+		const std::vector<std::string> *list = engine.findObjectList(param(a, 2).stringValue);
+		const float radius = ScriptConditions::teamHasAnyUnits(*team) ? logic.settings().maxRecruitRadius : 1000000.0f; // RW 0xBDCDC0
+		const float radiusSq = SimMath::sseMul(radius, radius);
+		const Coord3D home = teamCentreLiving(*team); // RW 0x7A02E1, once
+		const std::int32_t maxCount = param(a, 1).intValue;
+		for (std::int32_t count = 0; count < maxCount; ++count)
+		{
+			Object *best = nullptr;
+			float bestD = radiusSq;
+			for (Object *o = logic.getFirstObject(); o; o = o->getNextObject())
+			{
+				if (o->getControllingPlayer() != owner || !o->getTemplate())
+				{
+					continue;
+				}
+				bool match = tt && BuildAssistant::isEquivalentTo(o->getTemplate(), tt);
+				if (!match && list)
+				{
+					match = std::find(list->begin(), list->end(), o->getTemplate()->getName()) != list->end(); // RW 0x778EA0
+				}
+				Team *from = o->getTeam();
+				if (!match || !from || from == team || !from->isActive() || !from->getPrototype())
+				{
+					continue;
+				}
+				TeamPrototype *theirs = from->getPrototype();
+				if (logic.aiTeams().priority(*theirs) >= logic.aiTeams().priority(*mine))
+				{
+					continue;
+				}
+				const bool recruitable = from == owner->getDefaultTeam() || theirs->getDict().getBool("teamIsAIRecruitable");
+				if (!recruitable || (o->getDisabledMask() & (1u << 3)) != 0) // DISABLED_HELD
+				{
+					continue;
+				}
+				const float dx = SimMath::sseSub(home.x, o->getPosition()->x);
+				const float dy = SimMath::sseSub(home.y, o->getPosition()->y);
+				const float d = SimMath::sseAdd(SimMath::sseMul(dy, dy), SimMath::sseMul(dx, dx));
+				if (d > bestD)
+				{
+					continue;
+				}
+				bestD = d;
+				best = o;
+			}
+			if (!best)
+			{
+				break;
+			}
+			best->setTeam(team); // RW 0x69954A
 		}
 		return true;
 	}

@@ -326,18 +326,23 @@ std::int32_t counterMath(std::int32_t lhs, int op, std::int32_t rhs, ScriptEngin
 // the transport (+ 0x22C) and its loading, the auto-transport (+ 0x234), the origin waypoint (+ 0x230: the units start at the waypoint here, so
 // no group move follows), a horde's own upgrade / level slots (RW 0x68C866 0xB4 / 0xB8,
 // 0x694BF8 0xC4: the object's own paths run)
-void createReinforcements(ScriptEngine &engine, const std::string &teamName, const std::string &waypointName)
+// notre version : RW 0x7C8657(team, unité, true) pour CREATE_REINFORCEMENT_TEAM_AT_UNIT_POSITION (RW 0x7CB391) : l'unité nommée (RW 0x75A243, absente :
+// rien) donne la position (+ 0x38) ; si son modèle est une STRUCTURE (+ 0x108 & 0x80), chaque recrue qui a une IA (+ 0x260) voit sa position ajustée
+// par adjustDestination (RW 0x6FE456, + 0x1CC, groupe nul) avant d'être placée ; RW 0x68B3AB qui suit ne touche que le drawable (+ 0xA4), côté client
+void createReinforcements(ScriptEngine &engine, const std::string &teamName, const std::string &placeName, bool atUnit)
 {
 	GameLogic &logic = engine.logic();
 	const TerrainLogic *terrain = logic.terrain();
-	const Waypoint *w = terrain ? terrain->findWaypointByName(waypointName) : nullptr;
+	const Waypoint *w = !atUnit && terrain ? terrain->findWaypointByName(placeName) : nullptr;
+	const Object *unit = atUnit ? engine.getUnitNamed(placeName) : nullptr;
 	const std::pair<std::string, std::string> q = engine.qualify(teamName);
 	TeamFactory &teams = logic.players().teams();
 	TeamPrototype *proto = teams.findTeamPrototype(q.first, q.second);
-	if (!w || !proto)
+	if (!(w || unit) || !proto)
 	{
 		return;
 	}
+	const bool adjust = unit && isKindOfName(*unit, "STRUCTURE");
 	if (!engine.host() || !logic.aiWorld())
 	{
 		engine.note("[S-1186] CREATE_REINFORCEMENT_TEAM: no object creation host / AI world");
@@ -349,7 +354,7 @@ void createReinforcements(ScriptEngine &engine, const std::string &teamName, con
 	{
 		engine.note("[S-1186] CREATE_REINFORCEMENT_TEAM: a team with a transport (the units start on the ground)");
 	}
-	const Coord3D spawn = w->location;
+	const Coord3D spawn = w ? w->location : *unit->getPosition();
 	float rowY = spawn.y;
 	for (int i = 1; i <= 7; ++i)
 	{
@@ -380,6 +385,13 @@ void createReinforcements(ScriptEngine &engine, const std::string &teamName, con
 			if (!obj)
 			{
 				continue;
+			}
+			AIUpdateInterface *ai = adjust ? obj->getAIUpdateInterface() : nullptr;
+			if (ai)
+			{
+				Coord3D adjusted = pos;
+				ai->world().pathfinder().adjustDestination(ai->adapter(), ai->locomotorInfo(), &adjusted, nullptr); // RW 0x6FE456
+				obj->setPosition(&adjusted);
 			}
 			obj->friend_onBuildComplete();
 			size_t at = 0;
@@ -955,7 +967,12 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 	}
 	if (name == "CREATE_REINFORCEMENT_TEAM")
 	{
-		createReinforcements(engine, param(a, 0).stringValue, param(a, 1).stringValue);
+		createReinforcements(engine, param(a, 0).stringValue, param(a, 1).stringValue, false);
+		return true;
+	}
+	if (name == "CREATE_REINFORCEMENT_TEAM_AT_UNIT_POSITION") // RW 0x7CB391
+	{
+		createReinforcements(engine, param(a, 0).stringValue, param(a, 1).stringValue, true);
 		return true;
 	}
 	if (name == "NAMED_BUILD_STRUCTURE_AT_WAYPOINT")
@@ -1075,7 +1092,7 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 		{
 			return true;
 		}
-		CastleBehavior *castle = dynamic_cast<CastleBehavior *>(o->findModule("CastleBehavior"));
+		CastleBehavior *castle = ScriptConditions::castleOf(logic, *o); // notre version : le donjon d'un camp de BFME1 mène à son camp
 		if (!castle || !castle->canUnpack(true) || !castle->isPlayerAllowedToPackOrUnpack(o->getControllingPlayer()))
 		{
 			return true;
@@ -1541,7 +1558,7 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 			return true;
 		}
 		const ThingTemplate *tt = logic.things().findTemplate(param(a, 0).stringValue);
-		CastleBehavior *castle = tt ? dynamic_cast<CastleBehavior *>(unit->findModule("CastleBehavior")) : nullptr;
+		CastleBehavior *castle = tt ? ScriptConditions::castleOf(logic, *unit) : nullptr; // notre version : le donjon d'un camp de BFME1 mène à son camp
 		if (!castle || !castle->canBuildAtBase(tt))
 		{
 			return true;

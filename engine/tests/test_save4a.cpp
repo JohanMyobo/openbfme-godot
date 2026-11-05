@@ -528,6 +528,62 @@ std::map<std::string, std::uint32_t> sectionValues(const GameLogic &logic)
 }
 } // namespace
 
+// notre version : TeamPrototype::updateState (RW 0x7A676D) supprime des équipes : la liste du snapshot et celle de la partie peuvent différer au milieu
+TEST_CASE("save4a teams: a team deleted in the middle of the list, in the snapshot's game or in the loading game, loads to the snapshot's teams and hash")
+{
+	NoScienceStore noScienceStore;
+	const auto threeRaiders = [](logictest::LogicWorld &w) {
+		startExtras(w);
+		std::vector<Team *> made;
+		for (int i = 0; i < 3; ++i)
+		{
+			made.push_back(w.teams.createTeam(w.teams.findTeamPrototype("Raiders")));
+		}
+		return made;
+	};
+	const auto ids = [](const TeamPrototype *proto) {
+		std::vector<TeamID> out;
+		for (const Team *t : proto->teams())
+		{
+			out.push_back(t->getID());
+		}
+		return out;
+	};
+	SUBCASE("deleted in the snapshot's game: the loading game's copy goes")
+	{
+		logictest::LogicWorld saved, loading;
+		const std::vector<Team *> made = threeRaiders(saved);
+		threeRaiders(loading);
+		const TeamID kept0 = made[0]->getID(), gone = made[1]->getID(), kept2 = made[2]->getID();
+		saved.teams.deleteTeam(made[1], saved.players);
+		saved.activateUpgrades();
+		std::vector<std::uint8_t> stream;
+		saved.logic->gameState().saveBlocks(kCore, stream);
+		const std::uint32_t savedHash = saved.logic->computeStateHash();
+		loading.activateUpgrades();
+		loading.logic->gameState().loadBlocks(kCore, stream);
+		CHECK(loading.logic->computeStateHash() == savedHash);
+		CHECK(loading.teams.findTeamByID(gone) == nullptr);
+		CHECK(ids(loading.teams.findTeamPrototype("Raiders")) == std::vector<TeamID>{ kept0, kept2 });
+	}
+	SUBCASE("deleted in the loading game: the snapshot's team comes back in its place")
+	{
+		logictest::LogicWorld saved, loading;
+		const std::vector<Team *> made = threeRaiders(saved);
+		const std::vector<Team *> theirs = threeRaiders(loading);
+		const std::vector<TeamID> all = ids(saved.teams.findTeamPrototype("Raiders"));
+		loading.teams.deleteTeam(theirs[1], loading.players);
+		saved.activateUpgrades();
+		std::vector<std::uint8_t> stream;
+		saved.logic->gameState().saveBlocks(kCore, stream);
+		const std::uint32_t savedHash = saved.logic->computeStateHash();
+		loading.activateUpgrades();
+		loading.logic->gameState().loadBlocks(kCore, stream);
+		CHECK(loading.logic->computeStateHash() == savedHash);
+		CHECK(ids(loading.teams.findTeamPrototype("Raiders")) == all);
+	}
+}
+
 TEST_CASE("save4a core blocks: a synthetic game whose changes the core covers is saved, loaded into a new game of the same START and has the same state "
 		  "hash, the same players, teams and next random numbers, and goes on equal (T1 as far as the core allows); the stream is reproducible (T2)")
 {

@@ -567,7 +567,7 @@ void TurretAI::setTurretTargetObject(Object *victim, bool forceAttacking)
 		{
 			setState(TURRETAI_AIM);
 		}
-		m_victimInitialTeam = victim->getTeam();
+		m_victimInitialTeam = victim->getTeam() ? victim->getTeam()->getID() : 0u;
 	}
 	else
 	{
@@ -575,7 +575,7 @@ void TurretAI::setTurretTargetObject(Object *victim, bool forceAttacking)
 		{
 			setState(TURRETAI_HOLD);
 		}
-		m_victimInitialTeam = nullptr;
+		m_victimInitialTeam = 0;
 	}
 }
 
@@ -604,7 +604,7 @@ void TurretAI::setTurretTargetPosition(const Coord3D *pos)
 	{
 		setState(TURRETAI_HOLD);
 	}
-	m_victimInitialTeam = nullptr;
+	m_victimInitialTeam = 0;
 }
 
 void TurretAI::recenterTurret()
@@ -835,7 +835,7 @@ void TurretAI::crc(StateHasher &h) const
 	h.addFloat(m_angle);
 	h.addFloat(m_pitch);
 	h.addU32(m_enableSweepUntil);
-	h.addU32(m_victimInitialTeam ? m_victimInitialTeam->getID() : 0u);
+	h.addU32(m_victimInitialTeam);
 	h.addI32(m_target);
 	h.addU32(m_continuousFireExpirationFrame);
 	h.addU32(m_sleepUntil);
@@ -863,16 +863,7 @@ void TurretAI::xfer(Xfer &x)
 	x.xferReal(&m_angle);
 	x.xferReal(&m_pitch);
 	x.xferUnsignedInt(&m_enableSweepUntil);
-	std::uint32_t team = m_victimInitialTeam ? m_victimInitialTeam->getID() : 0u;
-	x.xferUnsignedInt(&team);
-	if (x.isLoading())
-	{
-		m_victimInitialTeam = team == 0 ? nullptr : owner().logic().players().teams().findTeamByID(team);
-		if (team != 0 && !m_victimInitialTeam)
-		{
-			throw XferException("turret: the victim's team " + std::to_string(team) + " is not in the loaded game");
-		}
-	}
+	x.xferUnsignedInt(&m_victimInitialTeam); // l'id seul : une équipe supprimée depuis n'a plus d'objet
 	x.xferInt(&m_target);
 	if (x.isLoading())
 	{
@@ -918,7 +909,7 @@ StateReturnType TurretAimState::update()
 		// RW 0x691269 (isAbleToAttack) and 0x68D6A6(continued target, forced or not, the AI's last command source): the port's canAttackObject stands in (S-1106)
 		const bool able = w && enemy && w->canAttackObject(*enemy, a.lastCommandSource(), t.forceAttacking());
 		nothingInRange = !enemy || !t.isAnyWeaponInRangeOf(*enemy);
-		if (!enemy || !able || (!isPrimaryEnemy && nothingInRange) || enemy->getTeam() != t.victimInitialTeam())
+		if (!enemy || !able || (!isPrimaryEnemy && nothingInRange) || (enemy->getTeam() ? enemy->getTeam()->getID() : 0u) != t.victimInitialTeam())
 		{
 			if (t.targetWasSetByIdleMood())
 			{

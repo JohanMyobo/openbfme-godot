@@ -283,6 +283,29 @@ TEST_CASE("script4 TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE (RW 0x7C30F7) has no owne
 	CHECK(e.stats().unportedActions.empty());
 }
 
+TEST_CASE("notre version : RW 0x7A09E4, une équipe bâtie par l'IA (+ 0x112) devient prête quand aucun membre n'est en construction, et lance alors ses scripts")
+{
+	combattest::CombatWorld w;
+	startEngine(*w.logic);
+	ScriptEngine &e = w.logic->scriptEngine();
+	TeamFactory &teams = w.logic->players().teams();
+	Team *t = teams.createTeam(teams.initTeam("Batie", w.playerOf('A'), false), false);
+	REQUIRE(t);
+	Team::ScriptState &st = t->scriptState();
+	st.wasBuilt = true; // RW 0x79FE29(1), comme AIPlayerTeams
+	Object *member = w.unit("Dummy", 'A', 300.0f, 300.0f);
+	member->setTeam(t);
+	member->setStatus(OBJECT_STATUS_UNDER_CONSTRUCTION, true);
+	t->setActive();
+	e.updateTeamState(*t);
+	CHECK(st.created);
+	CHECK(!st.ready); // un membre en construction (RW 0x44DDEC(2)) la retient
+	member->setStatus(OBJECT_STATUS_UNDER_CONSTRUCTION, false);
+	e.updateTeamState(*t);
+	CHECK(!st.created);
+	CHECK(st.ready); // sans cela, ni OnCreate ni scripts génériques : l'IA de BFME1 produit sans jamais attaquer
+}
+
 TEST_CASE("script4 TEAM_RECRUIT_UNITS_FROM_TEAM (RW 0x7C2C7A -> Team RW 0x7A449F): up to the count, the source prototype's members nearest the "
 		  "destination's live centre by the squared 2D distance join it; a tie goes to the later candidate; the destination is made when missing")
 {
