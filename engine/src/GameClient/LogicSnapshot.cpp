@@ -345,6 +345,16 @@ std::shared_ptr<const LogicSnapshot> LogicSnapshot::build(GameLogic &logic, cons
 			{
 				os = std::min(os, sm->clientObjectStatus(*o, p));
 			}
+			// Notre version, BFME1. Faits cible : les modules de la Moria (moriamodules.ini) sont INERT_SHROUD_REVEALER, avec une boîte de 180 autour de leur
+			// origine pour des maillages bien plus longs (MMCNatBridgeA01 : Gandalf marche dessus à 493 de l'origine), et 0x5CA2E0 les enregistre dans la
+			// partition. Le jeu d'origine les assombrit par pixel (passe m_shroudMaterialPass, W3DScene.cpp:538, source Open-BFME-1) ; nous n'avons pas encore
+			// cette passe sur les modèles. Inférence, à remplacer par la passe : sur une carte au terrain masqué, ces morceaux de décor restent affichés, sinon le sol disparaît sous les héros.
+			// Seule la vue du joueur change : la logique garde le vrai statut.
+			static const int kInertShroudRevealer = ObjectTemplateInfoBuilder::kindOfIndex("INERT_SHROUD_REVEALER");
+			if (logic.terrainRenderDisabled() && kInertShroudRevealer >= 0 && o->isKindOf((unsigned)kInertShroudRevealer))
+			{
+				os = OBJECTSHROUD_CLEAR;
+			}
 			s.shroudedForLocal = os == OBJECTSHROUD_SHROUDED;
 			s.objectShroud = (int)os;
 			s.shroudRecord = sm->hasRecord(*o); // lane VISUAL-2 r2

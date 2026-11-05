@@ -718,6 +718,28 @@ void ActCampaignLogic::enterAct(const CampaignAct &act, int depth)
 			m_errors.push_back("act " + act.name + ": ToggleArmyControl names an unknown army " + toggle.name);
 		}
 	}
+	for (const ActModifyArmyEntry &modify : act.modifyArmyEntries)
+	{
+		// INFÉRENCE : le gestionnaire de ModifyArmyEntry n'a pas été lu ; le gabarit CurUnitTemplate de l'armée nommée devient NewUnitTemplate
+		const ActPlayerArmy *army = m_stores->findPlayerArmy(modify.playerArmy);
+		if (!army)
+		{
+			m_errors.push_back("act " + act.name + ": ModifyArmyEntry names an unknown LivingWorldPlayerArmy " + modify.playerArmy);
+			continue;
+		}
+		auto it = m_modifiedEntries.find(modify.playerArmy);
+		if (it == m_modifiedEntries.end())
+		{
+			it = m_modifiedEntries.emplace(modify.playerArmy, army->entries).first;
+		}
+		for (ActArmyEntry &entry : it->second)
+		{
+			if (entry.thingTemplate == modify.curUnitTemplate)
+			{
+				entry.thingTemplate = modify.newUnitTemplate;
+			}
+		}
+	}
 	for (const ActMergeArmy &merge : act.mergeArmies)
 	{
 		// INFÉRENCE : la fusion et la scission (0x7B4510) changent ce que contiennent les armées ; seule la disparition de l'armée source fusionnée
@@ -918,19 +940,114 @@ bool ActCampaignLogic::canEnterRegion(const std::string &region) const
 	return std::any_of(m_forced.begin(), m_forced.end(), [&](const ActForceBattle &b) { return b.region == region; });
 }
 
-std::vector<ActSkirmishOpponent> ActCampaignLogic::opponentsOf(const std::string &region) const
+std::vector<ActSkirmishSlot> ActCampaignLogic::skirmishSlotsOf(const std::string &region) const
 {
-	std::vector<ActSkirmishOpponent> out;
-	if (const ActRegion *r = m_regions->findRegion(region))
+	std::vector<ActSkirmishSlot> out;
+	const ActRegion *r = m_regions->findRegion(region);
+	if (!r)
+	{
+		return out;
+	}
+	auto slotOf = [](const ActSkirmishOpponent &o, int slot) {
+		ActSkirmishSlot s;
+		s.slot = slot;
+		s.name = o.isPlayer ? std::string("PlayerHuman") : o.name;
+		s.faction = o.faction;
+		s.startPosition = o.startPosition;
+		s.team = o.teamId;
+		s.human = o.isPlayer;
+		return s;
+	};
+	const std::string act = actName();
+	int next = 1;
+	for (const ActSkirmishOpponent &o : r->opponents)
+	{
+		if (o.isPlayer)
+		{
+			out.push_back(slotOf(o, 0));
+		}
+		else if (std::find(o.allowInActs.begin(), o.allowInActs.end(), act) != o.allowInActs.end())
+		{
+			out.push_back(slotOf(o, next++));
+		}
+	}
+	if (next == 1) // 0xA1B7FF -> 0xA1A0F0
 	{
 		for (const ActSkirmishOpponent &o : r->opponents)
 		{
-			if (o.allowInActs.empty() || std::find(o.allowInActs.begin(), o.allowInActs.end(), actName()) != o.allowInActs.end())
+			if (!o.isPlayer)
 			{
-				out.push_back(o);
+				out.push_back(slotOf(o, 1));
+				break;
 			}
 		}
 	}
+	std::stable_sort(out.begin(), out.end(), [](const ActSkirmishSlot &a, const ActSkirmishSlot &b) { return a.slot < b.slot; });
+	return out;
+}
+
+std::optional<ActWalkOnArmy> ActCampaignLogic::walkOnArmyOf(const std::string &region) const
+{
+	const ActRegion *r = m_regions->findRegion(region);
+	if (!r)
+	{
+		return std::nullopt;
+	}
+	const ActArmy *chosen = nullptr;
+	Coord2D direction;
+	for (const ActForceBattle &battle : m_forced) // 0x7AD6E1 / 0x7AD726
+	{
+		if (battle.region == region && !battle.useArmy.empty())
+		{
+			for (const ActArmy &a : m_armies)
+			{
+				if (a.name == battle.useArmy)
+				{
+					chosen = &a;
+					direction = battle.armyAttackDirection;
+				}
+			}
+			break;
+		}
+	}
+	if (!chosen)
+	{
+		// S-5017, voir ActCampaign.h
+		const bool haveCentre = r->customCenterPoint || !r->armyPlacementPos.empty();
+		const Coord2D centre = r->customCenterPoint ? r->centerPoint : (haveCentre ? r->armyPlacementPos.front() : Coord2D{});
+		float best = 0.0f;
+		for (const ActArmy &a : m_armies)
+		{
+			if (!a.playerOwned || !a.playerControlled || a.isCity || a.playerArmy.empty())
+			{
+				continue;
+			}
+			const float dx = centre.x - a.position.x, dy = centre.y - a.position.y;
+			const float d = dx * dx + dy * dy;
+			if (!chosen || d < best)
+			{
+				chosen = &a;
+				best = d;
+				direction = haveCentre ? Coord2D{ dx, dy } : Coord2D{};
+			}
+		}
+	}
+	if (!chosen)
+	{
+		return std::nullopt;
+	}
+	const ActPlayerArmy *army = m_stores->findPlayerArmy(chosen->playerArmy);
+	if (!army)
+	{
+		return std::nullopt; // déjà une erreur de l'acte qui a créé l'armée
+	}
+	ActWalkOnArmy out;
+	out.name = chosen->name;
+	out.playerArmy = chosen->playerArmy;
+	const auto modified = m_modifiedEntries.find(chosen->playerArmy);
+	out.entries = modified != m_modifiedEntries.end() ? modified->second : army->entries;
+	out.survivalThreshhold = army->survivalThreshhold;
+	out.direction = direction;
 	return out;
 }
 

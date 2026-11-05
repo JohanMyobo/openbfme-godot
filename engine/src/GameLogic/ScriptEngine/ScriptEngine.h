@@ -286,6 +286,7 @@ public:
 		int playerIndex = -1;
 		bool victory = false;
 		std::string action;
+		std::string script; // le script qui l'a demandée (le rapport des tests)
 	};
 	const std::vector<EndRequest> &endRequests() const { return m_endRequests; }
 	void addEndRequest(bool victory, const std::string &action);

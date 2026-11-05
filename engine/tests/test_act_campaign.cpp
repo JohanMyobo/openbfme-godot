@@ -9,10 +9,12 @@
 
 #include "GameEngineDevice/Win32Device/Common/Win32BIGFileSystem.h"
 #include "GameLogic/LivingWorld/ActCampaign.h"
+#include "GameLogic/NewGame/StartingBase.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 
 using namespace LivingWorld;
 
@@ -104,7 +106,7 @@ LivingWorldRegionCampaign TestCampaign
 		BonusMissionObjectiveTag = BONUSROUND:Trois
 		ConnectsTo = Rohan Mordor
 		SkirmishOpponent
-			Name = Toujours
+			Name = SansActe
 			Faction = FactionMordor
 			StartPosition = 2
 			TeamID = 1
@@ -112,7 +114,16 @@ LivingWorldRegionCampaign TestCampaign
 		SkirmishOpponent
 			Name = ActeDeux
 			Faction = FactionIsengard
+			StartPosition = 3
+			TeamID = 4
 			AllowInActs = Two Three
+		End
+		SkirmishOpponent
+			Name = SkirmishRohan
+			Faction = FactionRohan
+			StartPosition = 1
+			TeamID = 5
+			IsPlayer = Yes
 		End
 	End
 	Region Rohan
@@ -250,8 +261,23 @@ TEST_CASE("act campaign: the first act runs its timeline and a won region plays 
 	CHECK_FALSE(logic.canEnterRegion("Rohan"));
 	CHECK(logic.enterRegion("Moria") == "Premier");
 	CHECK(logic.enterRegion("Moria") == "Encore");
-	REQUIRE(logic.opponentsOf("Moria").size() == 1); // ActeDeux n'est pas permis à l'acte One
-	CHECK(logic.opponentsOf("Moria")[0].name == "Toujours");
+	// 0xA1B500 : à l'acte One, aucun adversaire n'est permis (0x7B9100 : une liste vide ne contient rien) : le premier non joueur prend l'emplacement 1 (0xA1A0F0)
+	{
+		const std::vector<LivingWorld::ActSkirmishSlot> slots = logic.skirmishSlotsOf("Moria");
+		REQUIRE(slots.size() == 2);
+		CHECK(slots[0].slot == 0);
+		CHECK(slots[0].human);
+		CHECK(slots[0].name == "PlayerHuman"); // pas le Name du fichier, SkirmishRohan (0xA19CA8)
+		CHECK(slots[0].faction == "FactionRohan");
+		CHECK(slots[0].startPosition == 1);
+		CHECK(slots[0].team == 5);
+		CHECK(slots[1].slot == 1);
+		CHECK_FALSE(slots[1].human);
+		CHECK(slots[1].name == "SansActe");
+		CHECK(slots[1].startPosition == 2);
+		CHECK(slots[1].team == 1);
+	}
+	CHECK(logic.skirmishSlotsOf("Rohan").empty()); // sans adversaire : une mission ordinaire (0xA1B557)
 
 	CHECK_FALSE(logic.regionWon("Rohan"));
 	REQUIRE(logic.regionWon("Moria"));
@@ -260,7 +286,16 @@ TEST_CASE("act campaign: the first act runs its timeline and a won region plays 
 	CHECK(logic.enabledRegions().empty());
 	CHECK(logic.conqueredRegions().count("Moria") == 1);
 	CHECK(logic.actName() == "Two");
-	CHECK(logic.opponentsOf("Moria").size() == 2);
+	{
+		// à l'acte Two, l'adversaire permis ; le premier non joueur n'est plus repris
+		const std::vector<LivingWorld::ActSkirmishSlot> slots = logic.skirmishSlotsOf("Moria");
+		REQUIRE(slots.size() == 2);
+		CHECK(slots[0].human);
+		CHECK(slots[1].slot == 1);
+		CHECK(slots[1].name == "ActeDeux");
+		CHECK(slots[1].faction == "FactionIsengard");
+		CHECK(slots[1].team == 4);
+	}
 	CHECK(logic.findArmy("Heros") == nullptr);
 
 	// 0x7A4E30 : MoveSpeed 150 * 1/6 = 25 unités par image ; 50 unités : la marche finit à la deuxième image et joue l'acte suivant (0x7A51D0)
@@ -276,6 +311,43 @@ TEST_CASE("act campaign: the first act runs its timeline and a won region plays 
 	// EndAct : l'acte Never ne se joue jamais (0x7A7320)
 	logic.stepAct();
 	CHECK(logic.actName() == "Three");
+	CHECK(logic.errors().empty());
+}
+
+TEST_CASE("act campaign: notre version, BFME1: the direction of an army names its walk-on points (0x4300A0, 0x7601A0)")
+{
+	CHECK(StartingBase::walkOnAxisName(0.0f, 1.0f) == "TopArmy");
+	CHECK(StartingBase::walkOnAxisName(0.0f, -1.0f) == "BottomArmy");
+	CHECK(StartingBase::walkOnAxisName(2.0f, 1.0f) == "LeftArmy");
+	CHECK(StartingBase::walkOnAxisName(-2.0f, 1.0f) == "RightArmy");
+	CHECK(StartingBase::walkOnAxisName(0.0f, 0.0f) == "BottomArmy"); // |x| = |y|, y pas > 0
+	CHECK(StartingBase::walkOnAxisName(1.0f, 1.0f) == "TopArmy");    // |x| = |y| : l'axe y
+}
+
+TEST_CASE("act campaign retail: notre version, BFME1: the Fellowship walks into Moria, a forced battle's UseArmy wins")
+{
+	const char *install = std::getenv("BFME1_INSTALL");
+	if (!install)
+	{
+		retailtest::printSkip("BFME1 campaigns (BFME1_INSTALL unset)");
+		return;
+	}
+	Win32BIGFileSystem fs;
+	std::string error;
+	auto archive = fs.openArchiveFile((std::filesystem::u8path(install) / "INI.big").u8string(), &error);
+	REQUIRE_MESSAGE(archive, error);
+	fs.mountArchive(std::move(archive), "INI.big", false);
+	ActCampaignStores stores;
+	REQUIRE_MESSAGE(stores.load(fs, &error), error);
+	ActCampaignLogic logic;
+	REQUIRE_MESSAGE(logic.start(stores, "GondorCampaign", &error), error);
+	const std::optional<ActWalkOnArmy> moria = logic.walkOnArmyOf("Moria");
+	REQUIRE(moria.has_value());
+	CHECK(moria->name == "Fellowship");
+	CHECK(moria->playerArmy == "FellowshipPlayerArmy");
+	CHECK(moria->entries.size() == 9);
+	CHECK(std::any_of(moria->entries.begin(), moria->entries.end(), [](const ActArmyEntry &e) { return e.thingTemplate == "GondorAragorn" && e.quantity == 1; }));
+	CHECK_FALSE(logic.walkOnArmyOf("NoSuchRegion").has_value());
 	CHECK(logic.errors().empty());
 }
 

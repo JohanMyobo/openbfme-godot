@@ -38,7 +38,7 @@ std::int32_t colorInt(std::uint32_t rgb)
 } // namespace
 
 bool SkirmishSides::build(const SidesList &mapSides, const SkirmishGameInfo &info, int localSlot, const std::vector<GameLogicSettings::MultiplayerColorDef> &colors,
-	const PlayerTemplateStore &templates, Built &out, std::string *error, bool sharedStarts)
+	const PlayerTemplateStore &templates, Built &out, std::string *error, bool sharedStarts, const std::vector<std::string> *namedSlots)
 {
 	out = Built();
 	SidesList &sides = out.sides;
@@ -78,7 +78,16 @@ bool SkirmishSides::build(const SidesList &mapSides, const SkirmishGameInfo &inf
 		{
 			continue;
 		}
-		if (slot.playerTemplate >= 0)
+		if (namedSlots)
+		{
+			// 0x792D61 : le mode 6 garde le nom de l'emplacement
+			out.slotPlayerNames[(size_t)i] = (size_t)i < namedSlots->size() ? (*namedSlots)[(size_t)i] : std::string();
+			if (out.slotPlayerNames[(size_t)i].empty())
+			{
+				return failWith(error, "slot " + std::to_string(i) + " has no side name");
+			}
+		}
+		else if (slot.playerTemplate >= 0)
 		{
 			out.slotPlayerNames[(size_t)i] = "Player_" + std::to_string(slot.startPos + 1);
 			bool shared = false;
@@ -218,12 +227,65 @@ bool SkirmishSides::build(const SidesList &mapSides, const SkirmishGameInfo &inf
 				d.setInt("skirmishDifficulty", (int)slot.state - (int)SLOT_EASY_AI);
 			}
 		}
+		const std::string defaultTeam = "team" + name;
+		const SidesInfo *namedSide = nullptr;
+		if (namedSlots)
+		{
+			for (const SidesInfo &m : mapSides.sides)
+			{
+				if (m.dict.getAsciiString("playerName") == name)
+				{
+					namedSide = &m;
+					break;
+				}
+			}
+			// 0x4DB851 -> 0x4DBE93 : un camp que la carte n'a pas (Player_Animal, Gondor_Rangers dans cinq régions) : le joueur existe, sans scripts ni équipes de plus
+			if (namedSide)
+			{
+				// 0x4C9330 : la couleur du camp de ce nom
+				bool has = false;
+				const std::int32_t day = namedSide->dict.getInt("playerColor", &has);
+				if (has)
+				{
+					d.setInt("playerColor", (std::int32_t)((std::uint32_t)day | 0xFF000000u));
+					d.setInt("playerNightColor", (std::int32_t)((std::uint32_t)day | 0xFF000000u));
+				}
+				const std::int32_t night = namedSide->dict.getInt("playerNightColor", &has);
+				if (has)
+				{
+					d.setInt("playerNightColor", (std::int32_t)((std::uint32_t)night | 0xFF000000u));
+				}
+				if (slot.isAI())
+				{
+					side.buildList = namedSide->buildList;
+					if (namedSide->dict.known("playerAIType"))
+					{
+						d.setAsciiString("playerAIType", namedSide->dict.getAsciiString("playerAIType"));
+					}
+				}
+			}
+		}
 		sides.sides.push_back(side);
-		Dict team;
-		team.setAsciiString("teamName", "team" + name);
-		team.setAsciiString("teamOwner", name);
-		team.setBool("teamIsSingleton", true);
-		sides.teams.push_back(team);
+		bool mapDefaultTeam = false;
+		if (namedSide && slot.isAI())
+		{
+			for (const Dict &t : mapSides.teams)
+			{
+				if (t.getAsciiString("teamOwner") == name)
+				{
+					sides.teams.push_back(t);
+					mapDefaultTeam = mapDefaultTeam || t.getAsciiString("teamName") == defaultTeam;
+				}
+			}
+		}
+		if (!mapDefaultTeam)
+		{
+			Dict team;
+			team.setAsciiString("teamName", defaultTeam);
+			team.setAsciiString("teamOwner", name);
+			team.setBool("teamIsSingleton", true);
+			sides.teams.push_back(team);
+		}
 	}
 	// the creeps side: no allies, every player an enemy
 	if (hasCreeps)

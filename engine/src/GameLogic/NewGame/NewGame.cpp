@@ -10,6 +10,7 @@
 #include "GameLogic/NewGame/StartingBase.h"
 
 #include <algorithm>
+#include <cctype>
 #include <vector>
 
 namespace
@@ -43,6 +44,70 @@ bool NewGame::mapNameOfKey(const std::string &key, std::string &out)
 		return false;
 	}
 	out = dir;
+	return true;
+}
+
+bool NewGame::prepareNamedGame(const std::string &mapName, const std::vector<NamedSlot> &slots, const PlayerTemplateStore &templates, RandomAlgorithm algorithm, std::uint32_t seed, int difficulty,
+	int startingCash, NewGameStart &out, std::string *error)
+{
+	NumericState::normalizeFloatingPointEnvironment();
+	NewGameStart start(algorithm);
+	start.message.mode = NewGameMode::Skirmish;
+	start.message.difficulty = difficulty;
+	SkirmishGameInfo &info = start.message.game;
+	std::string lower = mapName;
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+	info.mapName = "maps/" + lower + "/" + lower + ".map";
+	info.seed = seed;
+	info.startingCash = startingCash;
+	start.mapName = mapName;
+	start.namedSlots.assign(LEGACY_MAX_SLOTS, std::string());
+	start.localSlot = -1;
+	for (const NamedSlot &n : slots)
+	{
+		if (n.slot < 0 || n.slot >= LEGACY_MAX_SLOTS) // 0xA1F655 : un emplacement hors de 0..7 est ignoré ; ici une erreur (règle 10)
+		{
+			return failWith(error, "the map '" + mapName + "' has the opponent '" + n.name + "' in slot " + std::to_string(n.slot));
+		}
+		if (!start.namedSlots[(size_t)n.slot].empty())
+		{
+			return failWith(error, "the map '" + mapName + "': slot " + std::to_string(n.slot) + " is given twice");
+		}
+		int templateIndex = -1;
+		for (int t = 0; t < templates.getPlayerTemplateCount(); ++t)
+		{
+			if (templates.getNthPlayerTemplate(t)->getName() == n.faction)
+			{
+				templateIndex = t;
+				break;
+			}
+		}
+		if (templateIndex < 0)
+		{
+			return failWith(error, "the map '" + mapName + "': the faction '" + n.faction + "' of the opponent '" + n.name + "' is not in the store");
+		}
+		SkirmishGameSlot &slot = info.slots[n.slot];
+		slot.state = n.human ? SLOT_PLAYER : SLOT_MED_AI; // 0xA19C9D (5), 0xA19CD8 (3)
+		slot.accepted = true;
+		slot.color = n.slot; // 0xA19D6B
+		slot.startPos = n.startPos;
+		slot.playerTemplate = templateIndex;
+		slot.teamNumber = n.team;
+		slot.origColor = slot.color;
+		slot.origStartPos = slot.startPos;
+		slot.origPlayerTemplate = slot.playerTemplate;
+		start.namedSlots[(size_t)n.slot] = n.name;
+		if (n.human && start.localSlot < 0)
+		{
+			start.localSlot = n.slot;
+		}
+	}
+	if (start.localSlot < 0)
+	{
+		return failWith(error, "the map '" + mapName + "' has no human opponent (IsPlayer)"); // 0xA1B810 ne fait qu'un message de débogage ; ici une erreur (règle 10)
+	}
+	start.random.initGameLogicRandom(info.seed, -1);
+	out = std::move(start);
 	return true;
 }
 

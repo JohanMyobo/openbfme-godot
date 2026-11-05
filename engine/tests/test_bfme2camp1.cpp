@@ -153,6 +153,35 @@ int gameLogicVersion(const std::vector<std::uint8_t> &stream)
 }
 } // namespace
 
+// notre version, BFME1 : TERRAIN_RENDER_DISABLE (TheTerrainLogic +0x18F4, sauvegardé 0x5AD924) : version 5 seulement quand le drapeau est levé
+TEST_CASE("notre version, BFME1: the terrain render flag travels in obfme:GameLogic version 5, only when it is set")
+{
+	const std::vector<std::string> core = { "obfme:TeamFactory", "obfme:Players", "obfme:GameLogic", "obfme:Random" };
+	logictest::LogicWorld saved;
+	LogicModules::registerAll(saved.w.modules);
+	REQUIRE(saved.w.load(kBuildIni, INI_LOAD_OVERWRITE, "units.ini").empty());
+	logictest::LogicWorld fresh;
+	LogicModules::registerAll(fresh.w.modules);
+	REQUIRE(fresh.w.load(kBuildIni, INI_LOAD_OVERWRITE, "units.ini").empty());
+	saved.activateUpgrades();
+	fresh.activateUpgrades();
+	std::vector<std::uint8_t> off;
+	saved.logic->gameState().saveBlocks(core, off);
+	CHECK(gameLogicVersion(off) == 1);
+	saved.logic->setTerrainRenderDisabled(true);
+	std::vector<std::uint8_t> on;
+	saved.logic->gameState().saveBlocks(core, on);
+	CHECK(gameLogicVersion(on) == 5);
+	REQUIRE_FALSE(fresh.logic->terrainRenderDisabled());
+	fresh.logic->gameState().loadBlocks(core, on);
+	CHECK(fresh.logic->terrainRenderDisabled());
+	std::vector<std::uint8_t> again;
+	fresh.logic->gameState().saveBlocks(core, again);
+	CHECK(again == on);
+	fresh.logic->gameState().loadBlocks(core, off); // une sauvegarde sans le drapeau le baisse
+	CHECK_FALSE(fresh.logic->terrainRenderDisabled());
+}
+
 // The archive merge into lane/wotr2 (coordinator 10-30, binding): obfme:GameLogic version 3 is BFME2CAMP1's campaign state (the buildability overrides,
 // the carry-over), as the archive writes it; version 4 adds the War of the Ring battle's army tags after it (it was 3 on feature/wotr, never released)
 TEST_CASE("archive x wotr: obfme:GameLogic version 3 is the campaign state and loads with no War of the Ring tags; version 4 adds the tags after it")

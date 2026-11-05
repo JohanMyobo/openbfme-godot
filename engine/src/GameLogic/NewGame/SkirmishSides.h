@@ -21,6 +21,16 @@
 //   * the order of the sides is the order of the players: the kept sides in map order, the slot sides in slot order, ReplayObserver last (neutral player 0
 //     is made by PlayerList itself).
 // Not ported (S-271): the skirmish scripts and build lists, playerAIType, livingWorldPlayerID, the preorder flag.
+//
+// notre version, BFME1 : les emplacements nommés de SinglePlayerSkirmishGameInfo (mode 6). FAITS CIBLE (lotrbfme.exe) :
+//   * prepareForMP_or_Skirmish (0x5A0390) met tous les camps sauf le neutre, PlyrCivilian et PlyrCreeps de côté, en mode 6 aussi : les camps de la carte qu'aucun emplacement ne nomme ne
+//     sont pas joueurs ; en mode 6 il ne donne pas aux camps mis de côté le DefaultPlayerAIType de leur faction (0x5A069B).
+//   * les noms (0x792D61) : en mode 6 l'emplacement garde son nom (+0x2C), rien ne le remplace par Player_<n> ; le reste du camp est celui d'un emplacement d'escarmouche (0x792E94 ff).
+//   * Player::initFromDict : un camp IA du mode 6 prend la couleur du camp de son nom mis de côté (0x4DB281 -> 0x4D1A90, 0x4DB8C8 -> 0x4C9330 : playerColor pour le jour et la nuit, puis
+//     playerNightColor), puis ses scripts (0x4DB913) ; le joueur humain prend la couleur du camp "PlayerHuman" (0x4DB374 -> 0x4DB411), les scripts de SkirmishHuman (0x4DB453), et rien de
+//     plus (0x4DB82E : mode 6, fin). Un camp IA dont la carte n'a pas le nom : pas de scripts ni de couleur de plus, sans erreur (0x4D1A90 faux, 0x4DB851 -> 0x4DBE93).
+// INFÉRENCE : les équipes (teamOwner = le camp) et la liste de construction d'un camp IA suivent ses scripts, comme les équipes de la cible RotWK (RW 0x6ADD80, MapScriptSetup.h) ; le
+// passage de 0x4DB95C à 0x4DBCC7 n'a pas été lu ligne à ligne.
 
 #pragma once
 
@@ -44,6 +54,6 @@ struct Built
 // lane WOTR-2: `sharedStarts` (a War of the Ring battle, whose allies may share a start position: NewGame::prepareNewGame) names a slot that shares an
 // earlier slot's position Player_<n> with the lowest n no start position gives; otherwise two slots on one position are refused
 bool build(const SidesList &mapSides, const SkirmishGameInfo &info, int localSlot, const std::vector<GameLogicSettings::MultiplayerColorDef> &colors,
-	const PlayerTemplateStore &templates, Built &out, std::string *error, bool sharedStarts = false);
+	const PlayerTemplateStore &templates, Built &out, std::string *error, bool sharedStarts = false, const std::vector<std::string> *namedSlots = nullptr);
 std::vector<std::string> stopLines();
 } // namespace SkirmishSides

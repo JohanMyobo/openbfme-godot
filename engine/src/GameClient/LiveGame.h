@@ -155,6 +155,8 @@ public:
 		bool campaignCarryover = false;
 		CampaignCarryover::State carryover;
 		std::vector<std::string> carryoverDelayed;
+		// notre version, BFME1 : l'armée de la campagne qui entre dans cette mission (StartingBase::placeInitialWalkOn, 0x795E76)
+		std::optional<StartingBase::WalkOnArmy> walkOn;
 		// lane UBER-1: the simulation profile of a game without a start message (a started game takes its setup's, SkirmishGameInfo::simulationProfile)
 		SimulationProfile simulationProfile = SimulationProfile::Faithful;
 	};
@@ -172,6 +174,8 @@ public:
 	// SMOOTH-1: every accessor of simulation state waits until the logic worker is idle (waitIdle): the caller sees a completed frame, never one
 	// being computed. The drawables belong to the render side and need no wait. Lane RENDERWAIT-1: each accessor passes its caller's file and line
 	// (filled in by the compiler) to waitIdle, which names the site of every blocking wait (logicWaitSites)
+	// notre version, BFME1 : le rendu lit ce drapeau atomique sans attendre le fil de la logique
+	bool terrainRenderDisabled() const { return m_logic && m_logic->terrainRenderDisabled(); }
 	GameLogic &logic(const char *file = __builtin_FILE(), int line = __builtin_LINE()) { holdLogic(file, line); return *m_logic; }
 	// lane SDK-2: the mod scripts' banners (ui.banner) and report lines since the last call; any thread (GameLogic/Sdk/SdkScriptHost.h)
 	std::vector<std::string> takeSdkBanners();
@@ -390,6 +394,7 @@ public:
 		std::vector<std::string> startSlotPlayers;           ///< per slot: the player name ("" for an unoccupied slot)
 		std::vector<StartingBase::Placed> startingObjects;   ///< the starting structures and units, in placement order
 		int createAHeroes = 0;                               ///< lane HERO-2: the slots whose Create-a-Hero the game start installed
+		int walkOnObjects = 0;                               ///< notre version, BFME1 : les objets de l'armée entrée en mission
 		int carryoverObjects = 0;                            ///< lane BFME2CAMP1: the campaign's carry-over objects the mission start made
 		size_t spellBooks = 0;                               ///< SPELL-1: the players' spell book objects made at the game start (RW 0x6B183D)
 		std::vector<std::string> startErrors;                ///< problems of the start (a slot without waypoint, a template that does not exist ...)
@@ -495,7 +500,7 @@ private:
 
 	// lane SCRIPT-1: the sides' lists and libraries into the logic's ScriptEngine (before the map's objects exist)
 	static bool mapScriptsWanted(const Options &options);
-	bool buildMapScriptSetup(const SidesList &sidesUsed, const std::set<std::string> &slotSides, std::string *error);
+	bool buildMapScriptSetup(const SidesList &sidesUsed, const std::set<std::string> &slotSides, std::string *error, const std::set<std::string> &teamSides = {});
 	bool setupMapScripts(const Options &options, const SidesList &sidesUsed, const std::set<std::string> &slotSides, std::string *error);
 	// ---- lane SMOOTH-1: the simulation owner, the publication and the presentation ----
 	void runFrameOwned(const WorkItem &item); ///< one logic frame, its hash, its snapshot and events published (on the owner's thread)

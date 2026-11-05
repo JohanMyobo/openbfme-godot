@@ -680,6 +680,50 @@ TEST_CASE("synthetic HUD: click replaces selection, Shift adds and toggles")
 	r.click(500, 500); r.selected({});
 }
 
+TEST_CASE("synthetic HUD: notre version, BFME1: with the alternate mouse the right click carries out a waiting power, the left click leaves it (lotrbfme.exe 0x9B0690, 0x9B0805, 0x9B916E)")
+{
+	synthetichud::Rig r; // la souris alternée, celle par défaut
+	Object *a = r.place("TestFighter", 100, 100);
+	r.click(100, 100); r.selected({ a->getID() });
+	CommandButton power;
+	power.m_command = GUI_COMMAND_SPECIAL_POWER;
+	power.m_options = COMMAND_OPTION_NEED_TARGET_POS;
+	power.m_cursorName = "Target";
+	r.input->ui().setGUICommand(&power);
+	SUBCASE("RotWK : the right click ends the waiting power")
+	{
+		r.click(300, 300, HudInput::Button::Right);
+		CHECK(r.input->ui().getGUICommand() == nullptr);
+		CHECK(r.input->commandTranslator().clickOutcomes().count("no command on the ground") == 0);
+	}
+	SUBCASE("BFME1 : the right click goes to the waiting power, without ending it first")
+	{
+		r.input->commandTranslator().setBfme1ClickRoles(true);
+		r.click(300, 300, HudInput::Button::Right);
+		// ce bouton de test ne nomme aucun pouvoir : rien n'est envoyé, mais le clic a bien été évalué et la visée continue
+		CHECK(r.input->commandTranslator().clickOutcomes().at("no command on the ground") == 1);
+		CHECK(r.input->ui().getGUICommand() == &power);
+		r.selected({ a->getID() });
+	}
+	SUBCASE("BFME1 : the left click does not reach the waiting power")
+	{
+		r.input->commandTranslator().setBfme1ClickRoles(true);
+		r.click(300, 300);
+		CHECK(r.input->commandTranslator().clickOutcomes().at("other-button") == 1);
+		CHECK(r.commands.messages().size() == 0u);
+		CHECK(r.input->ui().getGUICommand() == &power);
+	}
+	SUBCASE("BFME1 with the standard mouse keeps the left click for the target")
+	{
+		r.input->commandTranslator().setUseAlternateMouse(false);
+		r.input->commandTranslator().setBfme1ClickRoles(true);
+		CHECK_FALSE(r.input->commandTranslator().rightClickCarriesTarget());
+		r.click(300, 300, HudInput::Button::Right);
+		CHECK(r.input->ui().getGUICommand() == nullptr);
+	}
+	r.input->ui().setGUICommand(nullptr);
+}
+
 TEST_CASE("synthetic HUD: a porter hidden in construction loses its selection and pending placement")
 {
 	synthetichud::Rig r;
@@ -1199,7 +1243,7 @@ TEST_CASE("synthetic HUD: camera scroll, middle rotate and aimed-power cancel ne
 		// SPELLRC-1's InGameHud hook is a port seam, not a claim of retail spellbook parity.
 		bool aimed = true;
 		int cancels = 0;
-		r.input->guiCommandTranslator().setHudTargetCancel([&]() {
+		r.input->guiCommandTranslator().setHudTargetCancel([&](const ICoord2D &) {
 			if (!aimed || !r.input->ui().getInputEnabled()) return false;
 			aimed = false; ++cancels; return true;
 		});

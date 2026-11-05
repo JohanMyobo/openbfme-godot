@@ -40,7 +40,7 @@ MessageDisposition GUICommandTranslator::translate(const ClientMessage &msg)
 			// RW 0x83D8C2 .. 0x83DB8D: a right click that was not dragged ends the waiting command (setGUICommand(0)) and is destroyed: no order, no
 			// deselection follows from it. The port's spell book power waits outside InGameUI (the hook); InGameUI's own GUI command keeps the port's
 			// SelectionTranslator cancel (ZH SelectionXlat.cpp:930)
-			if (!m_rightDragged && m_hudTargetCancel && m_hudTargetCancel())
+			if (!m_rightDragged && m_hudTargetCancel && m_hudTargetCancel(msg.arg(0).region.hi))
 			{
 				return MessageDisposition::Destroy;
 			}

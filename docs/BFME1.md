@@ -236,7 +236,9 @@ region's mission. `LivingWorldStores` still holds recording handlers for those b
 parsers and S-1321 errors, and their schemas are not widened to accept BFME1 campaign rows).
 Under S-5017, not ported: the campaign's saves (Continue and Load Campaign show the unavailable screen), the world
 screen's Apt interface (the region window is provisional), the player's army moves, the eye tower, animated objects,
-`ScoreScreen.apt`, and the `SkirmishOpponent` sides of the SPS region maps, which therefore end at once.
+and `ScoreScreen.apt`. An SPS region map starts as BFME1's single-player skirmish (mode 6): `ActCampaignLogic::skirmishSlotsOf` picks the
+region's `SkirmishOpponent` entries for the current act, each slot takes over the map side of its name, and the player takes `PlayerHuman`.
+The player's faction does not yet follow the invading army, since the player does not move armies.
 BFME1 currently uses the English language view.
 
 ## Checks
@@ -286,3 +288,27 @@ BFME1_INSTALL="$PWD/games/BFME1" godot --headless --path godot -- --game=bfme1 -
 ```
 
 `godot/tests/bfme1_quit_test.gd` checks the camp-floor material and all six pause-menu buttons with real movie clicks, including confirmations.
+
+## Armée de campagne et terrain masqué (Moria, 05/11/2026)
+
+- L'armée d'une région (Region +0xB8, direction +0xBC) vient de `ForceBattle` (`UseArmy`, `ArmyAttackDirection`) ou de la fin de marche d'une armée du joueur (0x7A4FD0). Elle passe à la mission par 0x7C3850 -> 0x787060 (TheGameLogic +0x174), puis 0x795E76 -> 0x767470 -> 0x767010 crée les objets et 0x760400 les fait marcher depuis `InitialWalkOn*` ou `<Top|Left|Right|Bottom>Army{Spawn,Gather}Point`. Port : `ActCampaignLogic::walkOnArmyOf`, `StartingBase::placeInitialWalkOn`.
+- INFÉRENCE : le joueur ne déplace pas encore d'armée sur la carte (S-5017) : sans `ForceBattle`, l'armée est celle qu'il possède et contrôle, la plus proche du centre de la région.
+- Non porté (S-5018) : couleur de l'armée, tri des entrées, argent et sciences de campagne (0x767470), renforts appelés (0x767330), `TEAM_ASSIMILATE_*`, contenu suivant `MergePlayerArmy` (0x7B4510).
+- `TERRAIN_RENDER_DISABLE` (372, 0x709B83 -> 0x6EFC30) : octet TheTerrainLogic +0x18F4, sauvegardé (0x5AD924) ; 0xB14405 saute l'objet de rendu de classe 4. Port : `GameLogic::setTerrainRenderDisabled`, version 5 de `obfme:GameLogic`, nœud `Terrain/Terrain` masqué.
+
+## Retours de jeu sur la Moria (05/11/2026)
+
+Faits cible, vus dans `lotrbfme.exe` (VA = offset fichier + 0x400000) :
+
+- **Son.** Table Control en 0x12A8274 : LOOP (1), RANDOM (2), RANDOMSTART (4), INTERRUPT (8), FADE_ON_KILL (0x10), FADE_ON_START (0x20). generateFilename 0x4B3970 teste le bit 2 en 0x4B3A37 : levé, tirage au hasard ; baissé, fichier suivant. `DefaultSoundEffect` a `Control = random`, hérité partout. Le RANDOM de BFME1 tombait sur 0x40 (`AC_NOT_USED_BY_INI`) : les fichiers perdaient dossier et extension, d'où l'absence de tout bruitage et de toute voix.
+- **Clic droit.** Avec la souris alternée (par défaut), 0x9B0690 fait porter la commande en attente par le clic droit, 0x9B0805 ignore le clic gauche et 0x9B9160..0x9B916E n'annule pas au relâchement. RotWK fait l'inverse : c'est ce qui annulait le pouvoir d'un héros et lançait le défilement de la caméra.
+- **Portrait de groupe.** 0x996E85..0x99703C : table en dur camp vers `UPMordor_Army`, `UPGondor_Army`, `UPIsengard_Army`, `UPRohan_Army` ; `MultiPortrait` (l'image « Lots of Guys ») seulement pour un autre camp.
+- **Niveau des héros.** 0x996081..0x9960E0 écrit dans `APT:PalantirHero%dRank` (0x110C084, numéro de bouton + 1) ; `Palantir.apt` lit `$Palantir<bouton>Rank`.
+- **Brouillard en campagne.** La révélation de 0x62F91A ne concerne que les emplacements d'une partie configurée. La Moria appelle l'action 483 (`SET_LOGIC_FOG_STATE`, « Default TRUE ») et ses scripts révèlent des zones (`MAP_REVEAL_PERMANENTLY_AT_WAYPOINT`). Notre drapeau `ShroudManager::displayed` n'était levé que pour une escarmouche : le joueur voyait des ennemis que la logique tient pour cachés, et l'ordre d'attaque était refusé sans rien dire (VIS-1). Il est maintenant levé aussi en campagne.
+- **Modules de la Moria.** `moriamodules.ini` : `KindOf = ... INERT INERT_SHROUD_REVEALER`, boîte de 180 autour de l'origine, maillages bien plus longs. 0x5CA2E0 les enregistre dans la partition ; 0x5C7B30 ne les exempte pas du statut.
+
+Fait donneur (Open-BFME-1, `W3DScene.cpp:538`) : le jeu assombrit par pixel les objets non dégagés avec `m_shroudMaterialPass`.
+
+Inférence, provisoire : faute de cette passe sur nos modèles, les objets `INERT_SHROUD_REVEALER` restent affichés sur une carte au terrain masqué (`LogicSnapshot.cpp`) ; la logique garde leur vrai statut. Sans cela, le sol disparaissait sous les héros (`MMCNatBridgeA01` : Gandalf à 493 de l'origine, statut caché). Conséquence connue : **les murs et le sol de la Moria ne sont pas assombris par le brouillard, et se voient même loin des héros** ; les ennemis, eux, sont bien cachés. À remplacer par la passe : `material_overlay` multiplicatif lisant `shroud_tex`, à brancher dans `GodotW3DInstancer`.
+
+Reste à faire : la sélection de l'armée sur la carte (S-5017), les plans bleu-vert en haut à gauche de la salle d'entrée, l'objet à fond blanc-bleu (bouclier et lances) près du pont, et les actions non portées vues à la Moria : `CAMERA_RESTRICT_TO_AREA`, `LOCK_CAMERA_ANGLE_AND_HEIGHT`, `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE`, `MUSIC_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY`, `UNIT_SET_MODELCONDITION`, `AUDIO_SET_REVERB_ROOM_TYPE`, `SET_LOGIC_FOG_STATE`.

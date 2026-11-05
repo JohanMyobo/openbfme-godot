@@ -1327,6 +1327,7 @@ Dictionary GameWorld::load_internal(const LiveGame::Options &loIn, const String 
 		}
 		terrain->set_name("Terrain");
 		add_child(terrain);
+		m_terrainRenderDisabled = false; // un nouveau terrain se montre
 		report["terrain"] = trep;
 		timings["terrain_ms"] = timing::elapsedMs(t0);
 	}
@@ -2367,6 +2368,15 @@ void GameWorld::refresh_views(double deltaMs)
 
 void GameWorld::advance(double delta)
 {
+	// notre version, BFME1 : TERRAIN_RENDER_DISABLE (GameLogic.h). 0xB14405 ne saute que le maillage du terrain : l'eau, les rivières et les routes ont leurs propres objets de rendu
+	if (m_game && m_game->terrainRenderDisabled() != m_terrainRenderDisabled)
+	{
+		m_terrainRenderDisabled = !m_terrainRenderDisabled;
+		if (Node3D *chunks = Object::cast_to<Node3D>(get_node_or_null(NodePath("Terrain/Terrain"))))
+		{
+			chunks->set_visible(!m_terrainRenderDisabled);
+		}
+	}
 	{
 		// lane PERF-1: everything the main thread ran since the last advance (the whole previous render frame: scripts, this node, Godot's rendering)
 		const double cpu = timing::threadCpuMs();

@@ -139,6 +139,7 @@ void AudioEventRTS::generateFilename(const AudioEventEnv &env)
 	if (info.soundType != AT_SoundEffect)
 	{
 		m_filename += info.filename;
+		adjustForLocalization(env); // lotrbfme.exe 0x4B39FD
 		return;
 	}
 	const WeightedSoundList &list = info.sounds;
@@ -148,7 +149,8 @@ void AudioEventRTS::generateFilename(const AudioEventEnv &env)
 		return;
 	}
 	int which;
-	if (!(info.control & AC_SEQUENTIAL) && !m_forceSequential)
+	const bool randomPick = env.bfme1Control ? (info.control & AC_SEQUENTIAL) != 0 : (info.control & AC_SEQUENTIAL) == 0; // bfme1Control : lotrbfme.exe 0x4B3A37
+	if (randomPick && !m_forceSequential)
 	{
 		if (list.sounds.size() > 1)
 		{
@@ -188,6 +190,24 @@ void AudioEventRTS::generateFilename(const AudioEventEnv &env)
 	{
 		m_filename += extensionFor(settings, info.soundType);
 	}
+	adjustForLocalization(env); // lotrbfme.exe 0x4B3DC7
+}
+
+// FAITS CIBLE (lotrbfme.exe 0x4B3730) : le chemin existe (TheFileSystem, 0x4B3765) : rien ne change. Sinon, sans '\' rien ne change ; avec, le chemin devient le préfixe
+// localisé (0x4B33F0 avec son drapeau à 1 : "lang\" + la langue + "\", puis AudioRoot + "\" + le dossier du type) + ce qui suit le dernier '\'. FileSystem résout la casse
+// (lang\French\Data\audio\speech dans frenchaudio.big). FAIT DONNEUR : Zero Hour a la même fonction, le dossier de langue placé après le dossier du type.
+void AudioEventRTS::adjustForLocalization(const AudioEventEnv &env)
+{
+	if (env.localizedPrefix.empty() || !env.fileExists || m_filename.empty() || env.fileExists(m_filename))
+	{
+		return;
+	}
+	const size_t sep = m_filename.find_last_of('\\');
+	if (sep == std::string::npos)
+	{
+		return;
+	}
+	m_filename = env.localizedPrefix + folderFor(env.ini->settings, m_info->soundType) + m_filename.substr(sep + 1);
 }
 
 const std::string &AudioEventRTS::getFilename(const AudioEventEnv &env)

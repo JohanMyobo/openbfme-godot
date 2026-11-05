@@ -1024,7 +1024,9 @@ MessageDisposition CommandTranslator::translate(const ClientMessage &msg)
 			// orders nothing (RW 0x81FAFE) and the left click carries it out in either setup (RW 0x81FC73 skips the alternate-mouse test); a special power's target
 			// is a left click with the default (alternate) mouse
 			const CommandButton *pending = m_ctx.ui.getGUICommand();
-			const bool guiTarget = pending && pending->m_command != GUI_COMMAND_ATTACK_MOVE;
+			// FAITS CIBLE BFME1 (lotrbfme.exe) : avec la souris alternée, le clic droit (0x9B0690) passe par evaluateContextCommand quelle que soit la commande en attente, et
+			// le clic gauche (0x9B0805) ne fait rien ; RotWK réserve au contraire la cible au clic gauche (ci-dessus)
+			const bool guiTarget = pending && pending->m_command != GUI_COMMAND_ATTACK_MOVE && !rightClickCarriesTarget();
 			if (left ? (m_alternateMouse && !guiTarget) : (!m_alternateMouse || guiTarget))
 			{
 				++m_clickOutcomes["other-button"];

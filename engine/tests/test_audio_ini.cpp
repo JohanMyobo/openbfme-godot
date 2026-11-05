@@ -549,6 +549,18 @@ TEST_CASE("audio ini: AudioSettings, MiscAudio, AudioLOD and the animation setti
 // ---------------------------------------------------------------------------------------------
 // Eva.ini, LargeGroupAudio.ini, ScoredKillEvaAnnouncer.ini
 // ---------------------------------------------------------------------------------------------
+TEST_CASE("notre version : le mot RANDOM de BFME1 est le bit 0x02 et ne touche pas au dossier des sons (lotrbfme.exe, table 0x12A8274)")
+{
+	AudioFixture f;
+	f.fx.mount({ { "Data\\INI\\Default\\SubsystemLegend.ini", "" } }); // ce que isBfme1Data reconnaît
+	REQUIRE(f.fx.env.bfme1Data());
+	REQUIRE_MESSAGE(f.load(std::string(kDefaults) + "AudioEvent Snd\n  Sounds = a\n  Control = random loop\nEnd\n").empty(), "Control de BFME1");
+	const auto info = f.state.infos.find("Snd");
+	REQUIRE(info != nullptr);
+	CHECK(info->control == (unsigned)(AC_LOOP | 0x02u));
+	CHECK((info->control & AC_NOT_USED_BY_INI) == 0u);
+}
+
 TEST_CASE("notre version : un map.ini de BFME1 prédéfinit un événement Eva propre à BFME1 (MAP GOOD Isengard, EnemyCampSighted) sans écrire hors de la table de la carte")
 {
 	AudioFixture f;

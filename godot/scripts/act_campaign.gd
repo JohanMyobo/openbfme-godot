@@ -49,6 +49,7 @@ var _flare := {}     # région -> le temps écoulé de son effet de conquête
 var _icons := {}     # nom d'armée -> { objects, instances: { nom d'objet -> { id, object } }, size, position }
 var _icon_models := {} # nom de modèle -> le modèle du W3DInstancer
 var _spline: Array = []
+var _markers := {} # région -> Button, S-5017 (_markers_tick)
 var _spline_time := 0.0
 var _scroll := {}    # { from, to, from_angle, to_angle, time, duration }
 var _unported := {}  # les stops déjà signalés
@@ -278,6 +279,43 @@ func _build_ui() -> void:
 	row.add_child(enter)
 
 
+## S-5017, PROVISOIRE, notre invention en attendant l'interface Apt : l'étiquette cliquable d'une région jouable, sur son centre à l'écran, ramenée au bord si elle en sort
+## (le joueur doit la trouver : le corps cliquable de la Moria fait une centaine de pixels et rien d'autre ne la signale)
+func _markers_tick() -> void:
+	var st: Dictionary = acts.state()
+	var wanted := {}
+	if not _popup.visible and auto_regions == 0: # les tests cliquent sur le corps de la région, dans une fenêtre de 64 x 64 que les étiquettes couvriraient
+		for r in st.enabled + st.forced:
+			if acts.can_enter_region(String(r)):
+				wanted[String(r)] = true
+	for r in _markers.keys():
+		if not wanted.has(r):
+			_markers[r].queue_free()
+			_markers.erase(r)
+	var fill: Dictionary = _meshes.get(String(camp.region_object).to_lower(), {})
+	var size := get_viewport().get_visible_rect().size
+	for r in wanted.keys():
+		if not fill.has(r):
+			_stop("marker", "%s has no region body" % r)
+			continue
+		if not _markers.has(r):
+			var b := Button.new()
+			b.set_meta("game_text", true)
+			b.text = _text(String(_region_by_name[r].display_name))
+			b.add_theme_font_size_override("font_size", 18)
+			b.pressed.connect(_open_popup.bind(r))
+			_ui.add_child(b)
+			_markers[r] = b
+		var mesh: MeshInstance3D = fill[r]
+		var centre: Vector3 = mesh.global_transform * mesh.get_aabb().get_center()
+		var at := camera.unproject_position(centre)
+		if camera.is_position_behind(centre):
+			at = Vector2(size.x - at.x, size.y)
+		var button: Button = _markers[r]
+		var half := button.size * 0.5
+		button.position = Vector2(clampf(at.x, half.x + 8.0, size.x - half.x - 8.0), clampf(at.y, half.y + 8.0, size.y - half.y - 8.0)) - half
+
+
 func _text(label: String) -> String:
 	if label.is_empty():
 		return ""
@@ -312,6 +350,7 @@ func _process(delta: float) -> void:
 	_accum = minf(_accum, LOGIC_STEP)
 	_camera_tick(delta)
 	_effects_tick(delta)
+	_markers_tick()
 	if _text_left > 0.0:
 		_text_left -= delta
 		if _text_left <= 0.0:
@@ -570,6 +609,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				cam_dist = minf(cam_dist * 1.1, 4000.0)
 			MOUSE_BUTTON_LEFT:
 				var r := _pick_region(event.position)
+				print("ACTMAP click at %s: region '%s', playable %s" % [str(event.position), r, str(not r.is_empty() and acts.can_enter_region(r))])
 				if not r.is_empty() and acts.can_enter_region(r):
 					_open_popup(r)
 
@@ -598,11 +638,14 @@ func enter_region(region: String) -> void:
 		return
 	var r: Dictionary = _region_by_name[region]
 	_popup_region = region
+	var info: Dictionary = acts.region_info(region) # les adversaires et l'armée dépendent de l'acte courant
+	var slots: Array = info.get("slots", [])
+	var walk_on: Dictionary = info.get("walk_on", {})
 	var movie_name: String = acts.enter_region(region)
-	print("ACTMAP enter %s (act %s): map '%s', movie '%s'" % [region, acts.state().act, r.map, movie_name])
+	print("ACTMAP enter %s (act %s): map '%s', movie '%s', slots %s" % [region, acts.state().act, r.map, movie_name, str(slots.map(func(o): return o.name))])
 	_hide_map()
 	game._campaign_flow.begin_region_mission(self, {"map": String(r.map), "still": String(r.still), "music": String(r.music), "voice": String(r.voice), "movie": movie_name,
-		"difficulty": difficulty})
+		"difficulty": difficulty, "slots": slots, "walk_on": walk_on})
 
 
 ## La mission est finie et sa partie effacée : retour à l'écran du monde (campaign_flow.after_score)

@@ -554,7 +554,8 @@ MessageDisposition SelectionTranslator::translate(const ClientMessage &msg)
 				// a waiting ATTACK_MOVE (type 10) is not cancelled here (GUICommandTranslator's click roles own it, 0x004314B1) and takes the
 				// no-command branch: the standard mouse setup deselects
 				const CommandButton *command = m_ctx.ui.getGUICommand();
-				if (command && command->m_command != GUI_COMMAND_ATTACK_MOVE)
+				// FAIT CIBLE BFME1 (lotrbfme.exe 0x9B9160 .. 0x9B916E) : avec la souris alternée, ce clic n'annule pas la commande en attente, il l'exécute (CommandXlat)
+				if (command && command->m_command != GUI_COMMAND_ATTACK_MOVE && !m_commands.rightClickCarriesTarget())
 				{
 					// cancel the GUI command mode without deselecting
 					m_ctx.ui.setGUICommand(nullptr);

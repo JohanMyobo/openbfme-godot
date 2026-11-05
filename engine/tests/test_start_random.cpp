@@ -534,3 +534,102 @@ TEST_CASE("round2 review: tied start distances preserve slots and all seed words
   }
  }
 }
+
+// notre version, BFME1 : les emplacements nommés de SinglePlayerSkirmishGameInfo (SkirmishSides.h)
+TEST_CASE("SkirmishSides: named slots take over the map sides of their names")
+{
+	SidesList map;
+	auto addSide = [&map](const std::string &name, int color) {
+		SidesInfo side;
+		side.dict.setAsciiString("playerName", name);
+		if (color)
+		{
+			side.dict.setInt("playerColor", color);
+		}
+		map.sides.push_back(side);
+	};
+	addSide("", 0);
+	addSide("PlyrCivilian", 0);
+	addSide("PlyrCreeps", 0);
+	addSide("PlayerHuman", 0x112233);
+	addSide("Isengard_DL1", 0x445566);
+	addSide("Isengard_DL2", 0x778899); // nommé par aucun emplacement : pas un joueur (0x5A0390)
+	map.sides[4].buildList.resize(2);
+	map.sides[4].dict.setAsciiString("playerAIType", "TypeDeLaCarte");
+	auto addTeam = [&map](const std::string &name, const std::string &owner) {
+		Dict t;
+		t.setAsciiString("teamName", name);
+		t.setAsciiString("teamOwner", owner);
+		map.teams.push_back(t);
+	};
+	addTeam("teamIsengard_DL1", "Isengard_DL1");
+	addTeam("Attaque", "Isengard_DL1");
+	addTeam("Autre", "Isengard_DL2");
+	addTeam("DuJoueur", "PlayerHuman");
+
+	Store st;
+	SkirmishGameInfo g;
+	g.slots[0].state = SLOT_PLAYER;
+	g.slots[0].color = 0;
+	g.slots[0].startPos = 1;
+	g.slots[0].playerTemplate = 0;
+	g.slots[0].teamNumber = 1;
+	g.slots[1].state = SLOT_MED_AI;
+	g.slots[1].color = 1;
+	g.slots[1].startPos = 0;
+	g.slots[1].playerTemplate = 0;
+	g.slots[1].teamNumber = 0;
+	std::vector<std::string> named(LEGACY_MAX_SLOTS);
+	named[0] = "PlayerHuman";
+	named[1] = "Isengard_DL1";
+	SkirmishSides::Built built;
+	std::string error;
+	REQUIRE_MESSAGE(SkirmishSides::build(map, g, 0, colours(), st.store, built, &error, false, &named), error);
+	CHECK(built.slotPlayerNames[0] == "PlayerHuman");
+	CHECK(built.slotPlayerNames[1] == "Isengard_DL1");
+	auto sideOf = [&built](const std::string &name) -> const SidesInfo * {
+		for (const SidesInfo &s : built.sides.sides)
+		{
+			if (s.dict.getAsciiString("playerName") == name)
+			{
+				return &s;
+			}
+		}
+		return nullptr;
+	};
+	CHECK(sideOf("Isengard_DL2") == nullptr);
+	REQUIRE(sideOf("PlayerHuman") != nullptr);
+	REQUIRE(sideOf("Isengard_DL1") != nullptr);
+	const SidesInfo &human = *sideOf("PlayerHuman");
+	const SidesInfo &ai = *sideOf("Isengard_DL1");
+	CHECK(human.dict.getBool("playerIsHuman"));
+	CHECK_FALSE(ai.dict.getBool("playerIsHuman"));
+	CHECK((std::uint32_t)human.dict.getInt("playerColor") == 0xFF112233u);
+	CHECK((std::uint32_t)ai.dict.getInt("playerNightColor") == 0xFF445566u);
+	CHECK(human.dict.getInt("multiplayerStartIndex") == 1);
+	CHECK(ai.dict.getInt("skirmishDifficulty") == 1);
+	CHECK(ai.dict.getAsciiString("playerAIType") == "TypeDeLaCarte");
+	CHECK_FALSE(human.dict.known("playerAIType"));
+	CHECK(ai.buildList.size() == 2);
+	CHECK(human.dict.getAsciiString("playerEnemies").find("Isengard_DL1") != std::string::npos);
+	auto teamCount = [&built](const std::string &name) {
+		int n = 0;
+		for (const Dict &t : built.sides.teams)
+		{
+			n += t.getAsciiString("teamName") == name ? 1 : 0;
+		}
+		return n;
+	};
+	CHECK(teamCount("teamIsengard_DL1") == 1); // la carte la donne : pas de seconde
+	CHECK(teamCount("Attaque") == 1);
+	CHECK(teamCount("Autre") == 0);
+	CHECK(teamCount("DuJoueur") == 0); // le joueur s'arrête à la couleur de son camp (0x4DB82E)
+	CHECK(teamCount("teamPlayerHuman") == 1);
+
+	// un camp que la carte n'a pas (0x4DB851 -> 0x4DBE93) : le joueur existe, sans rien de la carte
+	named[1] = "CampAbsent";
+	REQUIRE_MESSAGE(SkirmishSides::build(map, g, 0, colours(), st.store, built, &error, false, &named), error);
+	REQUIRE(sideOf("CampAbsent") != nullptr);
+	CHECK(sideOf("CampAbsent")->buildList.empty());
+	CHECK(teamCount("teamCampAbsent") == 1);
+}

@@ -526,6 +526,14 @@ Dictionary GameAudio::boot(const Ref<RetailFileSystem> &fs, const Dictionary &co
 	const AudioSettings &s = m_ini->settings;
 	m_device = std::make_unique<GodotAudioDevice>(this, m_cache.get(), std::max(8, s.sampleCount2D) + std::max(8, s.sampleCount3D) + std::max(4, s.streamCount) + 8);
 	m_manager = std::make_unique<AudioManager>(*m_ini, *m_cache, *m_device, algorithm, seed);
+	if (fs->is_bfme1())
+	{
+		// notre version : les sons et les voix de BFME1 sont sous lang\<langue>\ dans <langue>audio.big (lotrbfme.exe 0x4B3730)
+		std::string prefix = fs->bfme1LanguageDir();
+		std::replace(prefix.begin(), prefix.end(), '/', '\\');
+		m_manager->setLocalizedPrefix(prefix);
+		m_manager->setBfme1Control(true);
+	}
 	// lane AUDIO-4 (QA-1 U21): the shell's player list until a live game binds its own (LiveGameAudio), and again after it detaches
 	m_manager->setIdleWorldQueries(AudioWorldQueries::noGamePlayerList());
 	if (!m_shellOnly)

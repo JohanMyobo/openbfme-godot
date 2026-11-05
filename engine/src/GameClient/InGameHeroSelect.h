@@ -66,6 +66,7 @@ public:
 		std::function<bool(const std::string &function, const std::vector<std::string> &args)> call;
 		std::function<void(const std::string &key, const std::string &image)> setImage; ///< "" removes the key
 		std::function<void(const std::string &record, const std::string &text)> setText;
+		std::function<std::string(int slot)> rankRecord; ///< notre version, BFME1 : le nom du texte du niveau d'un bouton ; vide = celui de RotWK
 	};
 
 	explicit InGameHeroSelect(HudContext &ctx, unsigned timeoutMs);
@@ -131,6 +132,7 @@ private:
 	void showSelectAll();     // RW 0x92C0A2
 	void hideSelectAll();     // RW 0x92C1F2
 	std::string slotKey(int slot, const char *suffix) const;
+	std::string rankRecord(int slot) const;
 	bool movieCall(const std::string &function, const std::vector<std::string> &args);
 
 	HudContext &m_ctx;

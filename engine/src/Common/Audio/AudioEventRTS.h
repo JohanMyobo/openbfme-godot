@@ -34,6 +34,7 @@
 #include "Common/RandomValue.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -98,6 +99,10 @@ struct AudioEventEnv
 	const AudioIniState *ini = nullptr;
 	GameLogicRandom *random = nullptr; ///< the AUDIO stream (RW 0xDA1C8C): an instance of the shared generator class, never the logic one
 	const AudioOwnerResolver *owners = nullptr;
+	// notre version, BFME1 (lotrbfme.exe 0x4B3730) : un fichier absent de son chemin se cherche sous lang\<langue>\ ; vide = pas de cette étape (RW 0x6DB821 ne l'a pas)
+	std::string localizedPrefix;
+	std::function<bool(const std::string &)> fileExists;
+	bool bfme1Control = false; ///< notre version, BFME1 : le bit 0x02 de Control veut dire RANDOM, pas SEQUENTIAL (lotrbfme.exe 0x4B3A37)
 };
 
 class AudioEventRTS
@@ -126,6 +131,7 @@ public:
 	// The file name to play (generated on first use or after markDirty): the VIRTUAL path inside the archives (backslashes).
 	const std::string &getFilename(const AudioEventEnv &env);
 	void generateFilename(const AudioEventEnv &env);
+	void adjustForLocalization(const AudioEventEnv &env); ///< notre version, BFME1 : lotrbfme.exe 0x4B3730
 	void rollDelayAndPerFile(const AudioEventEnv &env);  ///< RW 0x6DAC64
 	void generatePlayInfo(const AudioEventEnv &env);     ///< RW 0x6DBA01
 	void markDirty() { m_dirty = true; }

@@ -956,6 +956,7 @@ private:
 	std::map<std::string, int64_t> m_dynamicModels, m_staticModels;
 	Dictionary m_report;
 	bool m_autoAdvance = false;
+	bool m_terrainRenderDisabled = false; // notre version, BFME1 : ce que montre le terrain (GameLogic::terrainRenderDisabled)
 	bool m_paused = false;
 	bool m_animations = true;
 	bool m_houseColors = true;

@@ -69,7 +69,7 @@ enum SoundType : unsigned
 enum AudioControl : unsigned
 {
 	AC_LOOP = 0x01,
-	AC_SEQUENTIAL = 0x02,
+	AC_SEQUENTIAL = 0x02, // BFME1 : ce bit est RANDOM, de sens inverse (lotrbfme.exe 0x4B3A37, AudioEventEnv::bfme1Control)
 	AC_RANDOMSTART = 0x04,
 	AC_INTERRUPT = 0x08,
 	AC_FADE_ON_KILL = 0x10,

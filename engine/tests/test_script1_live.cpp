@@ -276,6 +276,38 @@ TEST_CASE("script live: a skirmish on Evendim runs Multiplayer_Human for each hu
 	CHECK(s1181);
 }
 
+TEST_CASE("notre version: a campaign mission displays its fog of war: what the logic hides from the player is presented hidden, so the player cannot aim at it")
+{
+	OPENBFME_REQUIRE_START(s);
+	Game g;
+	g.loadCampaign(*s, "map ang angmar");
+	CHECK(g.game->shroud().displayed());
+	g.step(0.0);
+	g.step(200.0);
+	const std::shared_ptr<const LogicSnapshot> snap = g.game->presentedSnapshot();
+	REQUIRE(snap != nullptr);
+	const Player *local = g.logic().players().getLocalPlayer();
+	REQUIRE(local != nullptr);
+	int hidden = 0;
+	int shown = 0;
+	int notComputed = 0;
+	for (const Object *o = g.logic().getFirstObject(); o; o = o->getNextObject())
+	{
+		const ObjectSnapshot *rec = snap->find(o->getID());
+		if (!rec || !g.game->shroud().hasRecord(*o))
+		{
+			continue;
+		}
+		// la vue du joueur suit la logique : un objet dont le statut est « caché » l'est aussi à l'écran (avant, ce champ restait à 0 en campagne)
+		notComputed += rec->objectShroud == 0 ? 1 : 0;
+		(rec->shroudedForLocal ? hidden : shown) += 1;
+	}
+	MESSAGE("objects hidden " << hidden << ", shown " << shown);
+	CHECK(notComputed == 0);
+	CHECK(hidden == 800);
+	CHECK(shown == 183);
+}
+
 TEST_CASE("script live: the opening of the first Angmar mission (MAP ANG Angmar): the intro cinematic's timer chain, captions, camera and hero spawns")
 {
 	OPENBFME_REQUIRE_START(s);

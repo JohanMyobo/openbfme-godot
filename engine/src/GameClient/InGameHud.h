@@ -99,6 +99,7 @@ public:
 
 	// ---- raw input in window pixels; the HUD decides whether the pointer is over its own movie (then the movie gets the event) or over the world ----
 	void mouseMove(int x, int y, int keyState = 0);
+	void castSpellAt(const ICoord2D &pixel); ///< the spell book power waiting for its target, cast at this pixel (lane SPELL-2)
 	void mouseButton(HudInput::Button button, bool down, int x, int y, int keyState, int timeMs, bool doubleClick = false);
 	// the wheel at a window pixel: over the Palantir it belongs to the movie, over the world it zooms the tactical camera (the LookAt translator)
 	void mouseWheel(int delta, int x, int y);

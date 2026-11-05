@@ -67,6 +67,7 @@
 #include "GameLogic/ObjectTypes.h"
 
 #include <array>
+#include <atomic>
 #include <cfloat>
 #include <functional>
 #include <map>
@@ -594,6 +595,10 @@ public:
 	const GameRules &gameRules() const { return m_gameRules; }
 	void setLegendaryHeroes(int factor) { m_legendaryHeroes = factor; }
 	int legendaryHeroes() const { return m_legendaryHeroes; }
+	// notre version, BFME1 : TERRAIN_RENDER_DISABLE (case 372, 0x709B83 -> 0x6EFC30) écrit TheTerrainLogic +0x18F4, un octet sauvegardé (0x5AD924), effacé par le reset des scripts
+	// (0x6ED87E) et lu par le rendu : la scène saute l'objet de rendu de classe 4, le terrain (0xB14405). Lu par le rendu : atomique.
+	void setTerrainRenderDisabled(bool disabled) { m_terrainRenderDisabled.store(disabled, std::memory_order_relaxed); }
+	bool terrainRenderDisabled() const { return m_terrainRenderDisabled.load(std::memory_order_relaxed); }
 	// lane BFME2CAMP1: the script's buildability overrides (TECHTREE_MODIFY_BUILDABILITY_OBJECT, RW 0x7BCF6C). TARGET FACTS: GameLogic + 0x10 is a hash map
 	// keyed by the template's name (template + 0x64) to a Buildable value (0 Yes, 1 Ignore_Prerequisites, 2 No, 3 Only_By_AI); RW 0x62FEE6 sets the
 	// entry (made when absent: RW 0x62F051), RW 0x62EE6D finds it, and ThingTemplate::getBuildable (RW 0x73BFE8) answers the entry when there is one,
@@ -1086,6 +1091,7 @@ private:
 	GameRules m_gameRules = MpGameRules::none(); ///< lane RULES-1
 	int m_legendaryHeroes = LegendaryHeroes::kOff; ///< lane RULES-1 (OpenBFME)
 	std::map<std::string, std::int32_t> m_buildableOverrides; ///< lane BFME2CAMP1: RW GameLogic + 0x10 (template name -> Buildable)
+	std::atomic<bool> m_terrainRenderDisabled{ false };
 	std::optional<CampaignCarryover::State> m_campaignCarryover; ///< lane BFME2CAMP1 (OpenBFME: retail's campaign manager)
 	CheatMode::State m_cheatMode;                  ///< lane CHEAT-1 (OpenBFME)
 	SimulationProfile m_simulationProfile = SimulationProfile::Faithful; ///< lane UBER-1 (OpenBFME)

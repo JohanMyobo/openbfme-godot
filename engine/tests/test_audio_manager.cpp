@@ -119,6 +119,37 @@ std::string snd(const char *name)
 }
 } // namespace
 
+TEST_CASE("audio manager: notre version, BFME1: a sound missing from its path is looked for under lang\\<language>\\ (lotrbfme.exe 0x4B3730)")
+{
+	Rig r("AudioEvent OnlyLocal\n  Sounds = voice\n  Type = ui everyone\nEnd\nAudioEvent Both\n  Sounds = both\n  Type = ui everyone\nEnd\nAudioEvent Neither\n  Sounds = gone\n  Type = ui everyone\nEnd\n"
+		"DialogEvent LocalSpeech\n  Filename = line.wav\nEnd\n",
+		{ { "lang\\french\\data\\audio\\sounds\\voice.wav", 300.0 }, { snd("both"), 300.0 }, { "lang\\french\\data\\audio\\sounds\\both.wav", 300.0 }, { "lang\\french\\data\\audio\\speech\\line.wav", 300.0 } });
+	const auto fileOf = [&](const char *name) {
+		AudioEventRTS e(name);
+		e.setAudioEventInfo(r.ini.infos.find(name));
+		return e.getFilename(r.mgr->env());
+	};
+	// sans préfixe (RotWK, BFME2) : pas de cette étape
+	CHECK(fileOf("OnlyLocal") == "Data\\Audio\\Sounds\\voice.wav");
+	r.mgr->setLocalizedPrefix("lang\\french\\");
+	CHECK(fileOf("OnlyLocal") == "lang\\french\\Data\\Audio\\Sounds\\voice.wav");
+	CHECK(fileOf("LocalSpeech") == "lang\\french\\Data\\Audio\\Speech\\line.wav");
+	// le chemin direct existe : il gagne (0x4B376C)
+	CHECK(fileOf("Both") == "Data\\Audio\\Sounds\\both.wav");
+	// absent partout : le chemin localisé, et l'échec arrive au rapport
+	CHECK(fileOf("Neither") == "lang\\french\\Data\\Audio\\Sounds\\gone.wav");
+	CHECK(r.cache->exists(fileOf("OnlyLocal")));
+}
+
+TEST_CASE("audio manager: notre version, BFME1: Control bit 0x02 means RANDOM, clear means the next file (lotrbfme.exe 0x4B3A37)")
+{
+	Rig r("AudioEvent Ordered\n  Sounds = a b c\n  Type = ui everyone\nEnd\n", { { snd("a"), 300.0 }, { snd("b"), 300.0 }, { snd("c"), 300.0 } });
+	r.mgr->setBfme1Control(true);
+	AudioEventRTS e("Ordered");
+	e.setAudioEventInfo(r.ini.infos.find("Ordered"));
+	CHECK(e.getFilename(r.mgr->env()) == "Data\\Audio\\Sounds\\a.wav");
+}
+
 TEST_CASE("audio manager: a UI sound plays the file Data\\Audio\\Sounds\\<name>.wav and ends after its length")
 {
 	Rig r("AudioEvent Click\n  Sounds = click\n  Type = ui everyone\nEnd\n", { { snd("click"), 300.0 } });

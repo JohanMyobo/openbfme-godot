@@ -764,6 +764,7 @@ Dictionary GameWorld::get_script_report() const
 		ed["player"] = (int64_t)r.playerIndex;
 		ed["victory"] = r.victory;
 		ed["action"] = g(r.action);
+		ed["script"] = g(r.script);
 		ends.push_back(ed);
 	}
 	d["end_requests"] = ends;

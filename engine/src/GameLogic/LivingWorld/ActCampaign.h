@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <memory>
 #include <set>
 #include <string>
@@ -182,6 +183,16 @@ struct ActSkirmishOpponent
 	bool isPlayer = false;
 };
 
+// Un emplacement de la partie d'une carte SPS (notre port de 0xA1B500 / 0xA19C40, voir skirmishSlotsOf)
+struct ActSkirmishSlot
+{
+	int slot = 0;           // 0 : le joueur ; les adversaires à partir de 1, dans l'ordre de la région
+	std::string name;       // "PlayerHuman" pour le joueur (0x1084094), le Name de l'adversaire sinon : un camp de la carte
+	std::string faction;
+	int startPosition = 0, team = 0;
+	bool human = false;
+};
+
 struct ActRegion
 {
 	std::string name, mapName, displayName, conqueredNotice, movieNameFirstTime, movieNameRepeat, skirmishStillImage, skirmishVoiceTrack, skirmishMusicTrack;
@@ -257,6 +268,15 @@ public:
 	ActMapInfo mapInfo;
 };
 
+// notre version, BFME1 : l'armée du joueur qui entre dans une région (ActCampaignLogic::walkOnArmyOf)
+struct ActWalkOnArmy
+{
+	std::string name, playerArmy;
+	std::vector<ActArmyEntry> entries;
+	int survivalThreshhold = 0;
+	Coord2D direction;
+};
+
 // Une armée en jeu sur la carte du monde
 struct ActArmy
 {
@@ -323,8 +343,21 @@ public:
 	bool campaignWon() const { return m_campaignWon; }
 
 	bool canEnterRegion(const std::string &region) const; // active et pas encore gagnée, ou une bataille forcée
-	// Les adversaires de cette région à cet acte (AllowInActs ; vide : à tout acte)
-	std::vector<ActSkirmishOpponent> opponentsOf(const std::string &region) const;
+	// FAITS CIBLE (lotrbfme.exe) : 0xA1B500 remplit SinglePlayerSkirmishGameInfo depuis les SkirmishOpponent de la région. Sans adversaire, pas de SinglePlayerSkirmishGameInfo : la
+	// carte est une mission ordinaire (0xA1B557, liste vide). IsPlayer (+0x18) : l'emplacement 0, nommé "PlayerHuman" (0xA19CA8), état SLOT_PLAYER (5). Sinon, l'adversaire n'entre
+	// que si AllowInActs contient le nom de l'acte (0x7B9100 : une liste vide ne contient rien) : emplacement suivant à partir de 1, nommé de son Name (0xA196C0), état SLOT_MED_AI
+	// (3). Aucun adversaire retenu : le premier non joueur de la région prend l'emplacement 1, quel que soit l'acte (0xA1A0F0). Couleur = numéro d'emplacement, position =
+	// StartPosition, équipe = TeamID (0xA19D44 ff).
+	// INFÉRENCE : les adversaires sont parcourus dans l'ordre du fichier ; 0xA1B500 passe par un itérateur (0x9277B0, 0x9278B0, 0x927830) non lu, l'ordre ne change que les couleurs
+	// d'un camp sans playerColor. S-5017, non porté : le camp du joueur devient celui de l'armée d'invasion de la région (Region +0xB8, 0x7CA262 -> 0x7C0110 -> armée +0x40), le joueur
+	// ne déplaçant pas encore d'armée
+	std::vector<ActSkirmishSlot> skirmishSlotsOf(const std::string &region) const;
+	// FAITS CIBLE (lotrbfme.exe) : l'armée d'une région est Region +0xB8, sa direction +0xBC / +0xC0, écrites par 0x7C9CB0 depuis deux chemins : ForceBattle (UseArmy et
+	// ArmyAttackDirection, 0x7AD6E1 / 0x7AD726) et la fin de marche d'une armée du joueur (0x7A4FD0 : +0x1D et +0x1E vrais, la région sous sa position, la direction de sa dernière
+	// marche). L'entrée dans la région (0x7C3850 -> 0x7BDE00 -> 0x787060) les recopie dans TheGameLogic +0x174 / +0x178 pour la mission.
+	// INFÉRENCE : le joueur ne déplace pas encore d'armée sur la carte (S-5017). Sans ForceBattle, l'armée retenue est celle que le joueur possède et contrôle, la plus proche du
+	// centre de la région, et sa direction va d'elle vers ce centre ; sans centre connu, la direction est nulle. Aucune armée possible : nullopt, comme une région sans Region +0xB8.
+	std::optional<ActWalkOnArmy> walkOnArmyOf(const std::string &region) const;
 	// Le film à montrer : la première entrée dans une région, puis le film de répétition
 	std::string enterRegion(const std::string &region);
 
@@ -356,6 +389,7 @@ private:
 	std::vector<std::string> m_enabled;
 	std::set<std::string> m_conquered, m_visited;
 	std::vector<ActForceBattle> m_forced;
+	std::map<std::string, std::vector<ActArmyEntry>> m_modifiedEntries; // les ModifyArmyEntry déjà joués, par LivingWorldPlayerArmy
 	std::vector<std::string> m_errors;
 	bool m_campaignWon = false;
 };

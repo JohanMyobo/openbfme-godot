@@ -444,6 +444,7 @@ Dictionary RetailFileSystem::mount_bfme1_path(const String &root)
 			fs->getFileListInDirectory("lang", "", "headertemplate.ini", found, true);
 			if (found.size() == 1) languageDir = found.begin()->substr(0, found.begin()->size() - std::strlen("headertemplate.ini"));
 		}
+		m_bfme1LanguageDir = languageDir;
 		std::vector<std::pair<std::string, std::vector<std::uint8_t>>> languageFiles;
 		for (const char *name : {"headertemplate.ini", "language.ini"})
 		{

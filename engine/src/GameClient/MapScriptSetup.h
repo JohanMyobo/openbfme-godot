@@ -54,10 +54,12 @@ public:
 	~MapScriptSetup();
 
 	// `sides`: the game's TheSidesList (the order of ThePlayerList); `map`: the map file read (its sides and script lists, by side name);
+	// notre version, BFME1 : `teamSides`, les camps qui gardent leur liste de la carte et reçoivent les équipes de leurs bibliothèques (les camps IA d'une carte SPS : les équipes de la
+	// région mise de côté suivent le camp de leur nom, comme RW 0x6ADD80, INFÉRENCE SkirmishSides.h)
 	// `droppedMapSides`: side names whose map lists retail drops (a skirmish's slot sides); `aiTypes`: per side index, the playerAIType to use
 	// ("" none). Builds the per-side lists; library maps are read through `fs` and kept here (they must outlive the ScriptEngine's game).
 	bool build(ArchiveFileSystem &fs, const SkirmishAIStore &aiStore, const SidesList &sides, const LoadedMap &map,
-		const std::set<std::string> &droppedMapSides, const std::vector<std::string> &aiTypes, std::string *error);
+		const std::set<std::string> &droppedMapSides, const std::vector<std::string> &aiTypes, std::string *error, const std::set<std::string> &teamSides = {});
 
 	const std::vector<ScriptEngine::SideScripts> &sides() const { return m_sides; }
 	// the teams the slot sides' libraries add (RW 0x7313B3 / 0x6B07EF), owned by the side, in load order: added to the game's sides before

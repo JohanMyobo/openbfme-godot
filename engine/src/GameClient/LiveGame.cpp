@@ -165,7 +165,7 @@ bool LiveGame::load(const Options &options, std::string *error)
 	{
 		return false;
 	}
-	if (options.start)
+	if (options.start && options.start->namedSlots.empty()) // notre version, BFME1 : une carte SPS n'a pas de cache de cartes ; un Player_<n>_Start absent est l'erreur de StartingBase
 	{
 		MapCacheEntry actual;
 		actual.name = options.start->message.game.mapName;
@@ -216,17 +216,30 @@ bool LiveGame::load(const Options &options, std::string *error)
 	{
 		// retail: prepareForMP_or_Skirmish + addSidesForSlots + the ReplayObserver side, then PlayerList::newGame (RW 0x73193D, 0x627C1F, 0x626E1F)
 		SkirmishSides::Built built;
-		if (!SkirmishSides::build(m_map.sides, options.start->message.game, options.start->localSlot, settings.multiplayerColors, m_world.playerTemplates(), built, error, options.start->message.livingWorldBattle.active)) // lane WOTR-2: a battle's allies may share a start
+		if (!SkirmishSides::build(m_map.sides, options.start->message.game, options.start->localSlot, settings.multiplayerColors, m_world.playerTemplates(), built, error, options.start->message.livingWorldBattle.active,
+				options.start->namedSlots.empty() ? nullptr : &options.start->namedSlots)) // lane WOTR-2: a battle's allies may share a start
 		{
 			return false;
 		}
 		progress(12); // the sides exist (RW 0x62FBC7)
 		m_players->setSpellGameMode(SpellGameMode{ options.start->message.mode == NewGameMode::Skirmish, false }); // SPELL-1 (GameLogic + 0x110 == 2)
-		for (const std::string &n : built.slotPlayerNames)
+		std::set<std::string> namedAiSides;
+		for (size_t i = 0; i < built.slotPlayerNames.size(); ++i)
 		{
-			if (!n.empty())
+			const std::string &n = built.slotPlayerNames[i];
+			if (n.empty())
+			{
+				continue;
+			}
+			// notre version, BFME1 (SkirmishSides.h) : un camp IA nommé garde les scripts et les bibliothèques du camp de la carte (0x4DB913) ; seul le joueur humain
+			// reprend ceux de SkirmishHuman (0x4DB453)
+			if (options.start->namedSlots.empty() || options.start->message.game.slots[i].isHuman())
 			{
 				slotSides.insert(n);
+			}
+			else
+			{
+				namedAiSides.insert(n);
 			}
 		}
 		// lane MODS-3: the slot sides' script libraries are read before the players exist: their teams become the side's teams (retail's
@@ -234,7 +247,7 @@ bool LiveGame::load(const Options &options, std::string *error)
 		// through its team "Base"
 		if (mapScriptsWanted(options))
 		{
-			if (!buildMapScriptSetup(built.sides, slotSides, error))
+			if (!buildMapScriptSetup(built.sides, slotSides, error, namedAiSides))
 			{
 				return false;
 			}
@@ -433,7 +446,11 @@ bool LiveGame::load(const Options &options, std::string *error)
 	m_shroud = std::make_unique<ShroudManager>(*m_logic);
 	m_shroud->init(m_vision.partitionCellSize, m_vision.unlookPersistFrames);
 	m_shroud->setDisplayLevels(m_vision.clearAlpha, m_vision.fogAlpha, m_vision.shroudAlpha);
-	m_shroud->setDisplayed(options.start != nullptr); // a bare map load (viewers) has no explored map: the client shows it without the shroud
+	// a bare map load (viewers) has no explored map: the client shows it without the shroud.
+	// Notre version, fait cible : la révélation de RW 0x62F91A ne concerne que les emplacements d'une partie configurée ; une mission n'en a pas et garde son
+	// brouillard (BFME1, action de script 483 « Set presence of Fog of War to X. (Default TRUE.) »). Inférence : ce drapeau n'existe que pour les visionneuses,
+	// donc une campagne l'active comme une escarmouche. Sans cela, le joueur voyait des ennemis que la logique tient pour cachés et refusait d'attaquer (VIS-1).
+	m_shroud->setDisplayed(options.start != nullptr || options.campaign);
 	{
 		float maxX = 0.0f, maxY = 0.0f;
 		if (!m_terrain.getExtent(0, maxX, maxY))
@@ -573,6 +590,13 @@ bool LiveGame::load(const Options &options, std::string *error)
 				m_report.startErrors.push_back("slot " + std::to_string(i) + ": no player or faction to place a base for");
 				continue;
 			}
+			// notre version, BFME1 : un emplacement nommé sans Player_<n>_Start n'a pas de base, sans erreur (0x78AA9E -> 0x78ACA0 : Player_Animal, StartPosition 4)
+			if (!options.start->namedSlots.empty() && !m_logic->terrain()->findWaypointByName("Player_" + std::to_string(slot.startPos + 1) + "_Start"))
+			{
+				placed.notes.push_back("slot " + std::to_string(i) + " (" + player->getPlayerName() + "): the map has no start " + std::to_string(slot.startPos + 1) + ", no base (0x78AA9E)");
+				progress(counter++);
+				continue;
+			}
 			if (options.start->message.livingWorldBattle.active)
 			{
 				// lane WOTR-1: a War of the Ring battle (RotWK's game state is not 3: RW 0x62AC17 -> RW 0x629F34)
@@ -610,6 +634,25 @@ bool LiveGame::load(const Options &options, std::string *error)
 		const CampaignCarryover::SpawnResult carried =
 			CampaignCarryover::addCarryoverStuffToMap(*m_logic, *m_players, *m_logic->campaignCarryover(), options.carryoverDelayed);
 		m_report.carryoverObjects = (int)carried.objects.size();
+	}
+	if (options.walkOn) // notre version, BFME1 : 0x795E76, à la fin de startNewGame
+	{
+		Player *local = m_players->getLocalPlayer();
+		if (!local)
+		{
+			if (error) *error = "the walk-on army " + options.walkOn->name + " has no local player";
+			return false;
+		}
+		StartingBase::Result walkOn;
+		StartingBase::placeInitialWalkOn(*m_logic, *local, *options.walkOn, walkOn);
+		m_report.walkOnObjects = (int)walkOn.placed.size();
+		m_report.startNotes.insert(m_report.startNotes.end(), walkOn.notes.begin(), walkOn.notes.end());
+		if (!walkOn.errors.empty())
+		{
+			m_report.startErrors.insert(m_report.startErrors.end(), walkOn.errors.begin(), walkOn.errors.end());
+			if (error) *error = walkOn.errors.front();
+			return false;
+		}
 	}
 	{
 		// lane HERO-2: RW 0x6315F5 -> 0x61B103 (after the computer players' AI, RW 0x6313A6): the Create-a-Hero of every slot that has one comes from the
@@ -850,7 +893,7 @@ bool LiveGame::mapScriptsWanted(const Options &options)
 	return options.mapScripts == 1 || (options.mapScripts < 0 && (options.start || options.campaign));
 }
 
-bool LiveGame::buildMapScriptSetup(const SidesList &sidesUsed, const std::set<std::string> &slotSides, std::string *error)
+bool LiveGame::buildMapScriptSetup(const SidesList &sidesUsed, const std::set<std::string> &slotSides, std::string *error, const std::set<std::string> &teamSides)
 {
 	// the playerAIType of every side: a slot side of a started game: a human the Multiplayer_Human library, a computer its faction's
 	// DefaultPlayerAIType (RW 0x627C1F; S-1181); a map side its dict's playerAIType
@@ -876,7 +919,7 @@ bool LiveGame::buildMapScriptSetup(const SidesList &sidesUsed, const std::set<st
 		}
 	}
 	m_scriptSetup = std::make_unique<MapScriptSetup>();
-	return m_scriptSetup->build(m_fs, m_world.skirmishAI(), sidesUsed, m_map, slotSides, aiTypes, error);
+	return m_scriptSetup->build(m_fs, m_world.skirmishAI(), sidesUsed, m_map, slotSides, aiTypes, error, teamSides);
 }
 
 bool LiveGame::setupMapScripts(const Options &options, const SidesList &sidesUsed, const std::set<std::string> &slotSides, std::string *error)

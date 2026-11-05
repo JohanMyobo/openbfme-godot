@@ -149,6 +149,10 @@
    "reason": "lane RENDER-2: the construction look of a drawable (the build-up animation frame and the height offset of a structure being built, RW 0x4B51B5 / 0x4B686D): reads the object, writes only draw frames and render offsets, never simulation state"
   },
   {
+   "glob": "src/GodotDevice/GodotActCampaign.cpp",
+   "reason": "notre version, BFME1: the GDExtension's binding of the act campaign's world screen (ActCampaign): the shell between missions; no simulation runs while it is up, and a mission's inputs reach the logic only through GodotGameWorldCampaign's load options"
+  },
+  {
    "glob": "src/GodotDevice/GodotGameWorldCampaign.cpp",
    "reason": "lane CAMP-1: the GDExtension's campaign list, a campaign mission's load options (LiveGame::Options), the mission's end as the script engine reports it and the progress sidecar file; it reads logic state between frames and never writes it"
   },

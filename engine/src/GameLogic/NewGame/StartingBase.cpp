@@ -3,6 +3,7 @@
 
 #include "GameLogic/NewGame/StartingBase.h"
 
+#include "Common/BuildAssistant.h"
 #include "Common/Player.h"
 #include "Common/Team.h"
 #include "Common/Thing/ThingFactory.h"
@@ -20,8 +21,10 @@
 #include "GameLogic/Object/ExperienceTracker.h"
 #include "GameLogic/Object/Object.h"
 #include "GameLogic/SimMath.h"
+#include "GameLogic/ObjectTemplateInfo.h"
 #include "Libraries/WWVegas/WWMath/quat.h"
 
+#include <algorithm>
 #include <variant>
 
 namespace
@@ -468,6 +471,114 @@ bool StartingBase::callInLivingWorldArmy(GameLogic &logic, int armyId)
 	return true;
 }
 
+std::string StartingBase::walkOnAxisName(float directionX, float directionY)
+{
+	const float absX = directionX < 0.0f ? -directionX : directionX;
+	const float absY = directionY < 0.0f ? -directionY : directionY;
+	if (absX > absY)
+	{
+		return directionX > 0.0f ? "LeftArmy" : "RightArmy";
+	}
+	return directionY > 0.0f ? "TopArmy" : "BottomArmy";
+}
+
+// Voir StartingBase.h
+void StartingBase::placeInitialWalkOn(GameLogic &logic, Player &player, const WalkOnArmy &army, Result &result)
+{
+	const TerrainLogic *terrain = logic.terrain();
+	if (!terrain)
+	{
+		result.errors.push_back("walk-on army " + army.name + ": the logic has no terrain");
+		return;
+	}
+	static const int kHero = ObjectTemplateInfoBuilder::kindOfIndex("HERO");
+	int counted = 0; // 0x760F10
+	for (const WalkOnEntry &e : army.entries)
+	{
+		if (!e.isDefault)
+		{
+			counted += e.quantity;
+		}
+	}
+	const bool useDefaults = army.survivalThreshhold > 0 && army.survivalThreshhold > counted; // 0x767054 .. 0x76706F
+	int budget = player.commandPointsAvailable();                                             // 0x767096 .. 0x7670AB
+	std::vector<std::string> names;
+	for (int pass = 0; pass < 2; ++pass)
+	{
+		for (const WalkOnEntry &e : army.entries)
+		{
+			if (e.isDefault && !useDefaults)
+			{
+				continue;
+			}
+			const ThingTemplate *tt = logic.things().findTemplate(e.thingTemplate);
+			if (!tt)
+			{
+				if (pass == 0)
+				{
+					result.notes.push_back("walk-on army " + army.name + ": no template '" + e.thingTemplate + "' (0x76713E: retail places nothing)");
+				}
+				continue;
+			}
+			const bool hero = kHero >= 0 && MaskTest(ObjectTemplateInfoBuilder::build(*tt).kindOf, (unsigned)kHero);
+			if (hero != (pass == 0))
+			{
+				continue;
+			}
+			const int cost = BuildAssistant::commandPoints(*tt);
+			int quantity = e.quantity;
+			if (cost > 0 && pass > 0) // 0x76716C : un héros passe toujours
+			{
+				quantity = std::min(budget / cost, e.quantity);
+			}
+			if (quantity <= 0)
+			{
+				continue;
+			}
+			budget -= cost * quantity;
+			for (int q = 0; q < quantity; ++q)
+			{
+				names.push_back(e.thingTemplate);
+			}
+		}
+	}
+	const Waypoint *spawn = terrain->findWaypointByName("InitialWalkOnSpawnPoint");
+	const Waypoint *gather = spawn ? terrain->findWaypointByName("InitialWalkOnGatherPoint") : nullptr;
+	if (!spawn || !gather)
+	{
+		const std::string axis = walkOnAxisName(army.directionX, army.directionY);
+		spawn = terrain->findWaypointByName(axis + "SpawnPoint");
+		gather = terrain->findWaypointByName(axis + "GatherPoint");
+	}
+	const bool walks = spawn && gather;
+	if (!walks)
+	{
+		result.notes.push_back("walk-on army " + army.name + ": the map has no walk-on points, its objects stay where they were made (0x760432)");
+	}
+	int k = 0;
+	for (const std::string &name : names)
+	{
+		const Coord3D pos = walks ? armySlot(logic, spawn->location, k++) : Coord3D{ 0.0f, 0.0f, 0.0f };
+		Object *o = placeObjectAtPosition(logic, player, name, pos, result);
+		if (!o)
+		{
+			continue;
+		}
+		Placed placed;
+		placed.templateName = name;
+		placed.id = o->getID();
+		placed.position = pos;
+		result.placed.push_back(placed);
+		if (walks)
+		{
+			AICommand c; // 0x403918(gather, 2, 0, 1)
+			c.type = AICMD_MOVE_TO_POSITION;
+			c.path.push_back(gather->location);
+			logic.aiCommands().issue(*o, std::move(c));
+		}
+	}
+}
+
 // MSG_CALL_IN_REINFORCEMENTS (0x45F, the army id: the banner's button) and MSG_SUMMON_REINFORCEMENTS (0x45E: engage from state 0, never in a War of the Ring
 // battle, RW 0x80FEB2). [port decision, stricter than retail: an army is called in only by its own player]
 void StartingBase::registerLivingWorldHandlers(GameLogicDispatch &dispatcher)
@@ -494,5 +605,7 @@ std::vector<std::string> StartingBase::stopLines()
 		"[S-272] starting base: ported from the RotWK 2.01 disassembly (RW 0x62AC17; S-001 caveat). Not ported: Player::onStructureCreated / onStructureConstructionComplete / "
 		"onUnitCreated, the team activation, the pathfinder registration and the adjusted destination of mobile units, the partition search of a "
 		"zero-offset starting unit (an error), and the CRT acos / sin / cos parity (S-081 / S-167)",
+		"[S-5018] notre version, BFME1 : l'armée de campagne qui entre en mission (placeInitialWalkOn) : ni sa couleur, ni le tri de ses entrées, ni l'argent et les sciences de la "
+		"campagne (0x767470), ni les renforts appelés (0x767330), ni les actions TEAM_ASSIMILATE_* ; le contenu d'une armée ne suit pas MergePlayerArmy (0x7B4510)",
 	};
 }

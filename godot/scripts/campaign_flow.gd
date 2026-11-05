@@ -136,7 +136,7 @@ func begin_region_mission(map_screen: Node, options: Dictionary) -> void:
 		return
 	if not String(options.voice).is_empty():
 		game._audio.play_sound(String(options.voice)) # SkirmishVoiceTrack
-	var rep: Dictionary = world.start_region_mission({"map": region_map, "difficulty": difficulty, "progress": Callable(game, "_on_load_progress"), "test_hooks": hooks})
+	var rep: Dictionary = world.start_region_mission({"map": region_map, "difficulty": difficulty, "slots": options.get("slots", []), "walk_on": options.get("walk_on", {}), "progress": Callable(game, "_on_load_progress"), "test_hooks": hooks})
 	game._report = rep
 	print("CAMPAIGN load ok=%s errors=%s" % [rep.ok, str(rep.get("errors", []).slice(0, 5))])
 	if not rep.ok:

@@ -21,6 +21,7 @@
 #include "GameClient/TutorialSettings.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Map/TerrainLogic.h"
+#include "GameLogic/NewGame/NewGame.h"
 #include "GameLogic/Object/RetailObjectWorld.h"
 #include "GameLogic/Module/AttachUpdate.h"
 #include "GameLogic/ScriptEngine/ScriptActions.h"
@@ -28,6 +29,7 @@
 #include "GameNetwork/LockstepDriver.h"
 
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <filesystem>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -259,8 +261,9 @@ Dictionary GameWorld::start_campaign_mission(const Dictionary &options)
 }
 
 
-// notre version : BFME1 lance la carte de la région choisie à l'écran du monde (MapName de LivingWorldRegionCampaign), sans LinearCampaign ni report d'unités. Les
-// adversaires SkirmishOpponent des cartes SPS et la sauvegarde de la mission ne sont pas portés (S-5017).
+// notre version : BFME1 lance la carte de la région choisie à l'écran du monde (MapName de LivingWorldRegionCampaign), sans LinearCampaign ni report d'unités. La
+// sauvegarde de la mission n'est pas portée (S-5017). `slots` (ActCampaignGame.region_info : les SkirmishOpponent de la région à cet acte) : une carte SPS, une
+// SinglePlayerSkirmishGameInfo du mode 6 (0xA1B500, NewGame::prepareNamedGame) ; sans emplacement, une mission (0xA13E1C ff, mode 0).
 Dictionary GameWorld::start_region_mission(const Dictionary &options)
 {
 	Dictionary report;
@@ -292,12 +295,67 @@ Dictionary GameWorld::start_region_mission(const Dictionary &options)
 		cb = options["progress"];
 	}
 	m_testHooks = boolOpt(options, "test_hooks", false);
+	const Array slots = options.get("slots", Array());
+	if (!slots.is_empty())
+	{
+		std::vector<NamedSlot> named;
+		for (int64_t i = 0; i < slots.size(); ++i)
+		{
+			const Dictionary sd = slots[i];
+			NamedSlot ns;
+			ns.slot = (int)intOpt(sd, "slot", -1);
+			ns.name = n(String(sd.get("name", String())));
+			ns.faction = n(String(sd.get("faction", String())));
+			ns.startPos = (int)intOpt(sd, "start_position", -1);
+			ns.team = (int)intOpt(sd, "team", -1);
+			ns.human = boolOpt(sd, "human", false);
+			named.push_back(ns);
+		}
+		std::string error;
+		auto start = std::make_unique<NewGameStart>(RandomAlgorithm::ZH_CarryChain);
+		// 0xA13E1C : la graine d'une partie SinglePlayerSkirmishGameInfo vient de timeGetTime
+		const std::uint32_t seed = (std::uint32_t)intOpt(options, "seed", (int64_t)Time::get_singleton()->get_ticks_msec());
+		if (!m_settings || !NewGame::prepareNamedGame(map, named, m_world->setupPlayerTemplates(), RandomAlgorithm::ZH_CarryChain, seed, lo.difficulty, (int)m_settings->defaultStartingCash, *start, &error))
+		{
+			errors.push_back(g(m_settings ? error : std::string("GameWorld.setup has not read the game settings")));
+			return report;
+		}
+		start->message.game.simulationProfile = m_choice.current;
+		m_start = std::move(start);
+		lo.start = m_start.get();
+		lo.campaign = false; // le mode 6 compte comme une escarmouche (0x75F0A0)
+	}
+	const Dictionary walkOn = options.get("walk_on", Dictionary());
+	if (!walkOn.is_empty()) // ActCampaignGame::region_info
+	{
+		StartingBase::WalkOnArmy army;
+		army.name = n(String(walkOn.get("name", String())));
+		army.survivalThreshhold = (int)intOpt(walkOn, "survival_threshhold", 0);
+		const Vector2 direction = walkOn.get("direction", Vector2());
+		army.directionX = direction.x;
+		army.directionY = direction.y;
+		const Array entries = walkOn.get("entries", Array());
+		for (int64_t i = 0; i < entries.size(); ++i)
+		{
+			const Dictionary ed = entries[i];
+			StartingBase::WalkOnEntry e;
+			e.thingTemplate = n(String(ed.get("template", String())));
+			e.quantity = (int)intOpt(ed, "quantity", 0);
+			e.isDefault = boolOpt(ed, "default", false);
+			army.entries.push_back(std::move(e));
+		}
+		lo.walkOn = std::move(army);
+	}
 	report = load_internal(lo, g(map), options, cb, true);
 	if (!(bool)report.get("ok", false) || !m_game)
 	{
 		return report;
 	}
-	report["start"] = campaignHudStart();
+	report["walk_on_objects"] = (int64_t)m_game->report().walkOnObjects;
+	if (!lo.start)
+	{
+		report["start"] = campaignHudStart();
+	}
 	m_campaignStart = CampaignStart();
 	m_campaignStart.map = map;
 	m_campaignStart.difficulty = lo.difficulty;

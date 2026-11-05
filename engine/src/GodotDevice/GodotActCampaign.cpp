@@ -291,18 +291,38 @@ Dictionary ActCampaignGame::region_info(const String &region) const
 	d["center"] = v2(r->centerPoint);
 	d["custom_center"] = r->customCenterPoint;
 	d["end_of_campaign"] = r->endOfCampaign;
-	Array opponents;
-	for (const LivingWorld::ActSkirmishOpponent &o : m_logic.opponentsOf(r->name))
+	Array slots;
+	for (const LivingWorld::ActSkirmishSlot &o : m_logic.skirmishSlotsOf(r->name))
 	{
 		Dictionary od;
+		od["slot"] = (int64_t)o.slot;
 		od["name"] = s(o.name);
 		od["faction"] = s(o.faction);
 		od["start_position"] = (int64_t)o.startPosition;
-		od["team"] = (int64_t)o.teamId;
-		od["is_player"] = o.isPlayer;
-		opponents.push_back(od);
+		od["team"] = (int64_t)o.team;
+		od["human"] = o.human;
+		slots.push_back(od);
 	}
-	d["opponents"] = opponents;
+	d["slots"] = slots; // à l'acte courant : à relire juste avant d'entrer dans la région
+	if (const std::optional<LivingWorld::ActWalkOnArmy> walkOn = m_logic.walkOnArmyOf(r->name))
+	{
+		Dictionary wd;
+		wd["name"] = s(walkOn->name);
+		wd["player_army"] = s(walkOn->playerArmy);
+		wd["survival_threshhold"] = (int64_t)walkOn->survivalThreshhold;
+		wd["direction"] = v2(walkOn->direction);
+		Array entries;
+		for (const LivingWorld::ActArmyEntry &e : walkOn->entries)
+		{
+			Dictionary ed;
+			ed["template"] = s(e.thingTemplate);
+			ed["quantity"] = (int64_t)e.quantity;
+			ed["default"] = e.isDefault;
+			entries.push_back(ed);
+		}
+		wd["entries"] = entries;
+		d["walk_on"] = wd;
+	}
 	return d;
 }
 

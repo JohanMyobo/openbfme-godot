@@ -15,10 +15,9 @@ const char *const theSoundTypeNames[] = { "UI", "WORLD", "SHROUDED", "GLOBAL", "
 // RW 0xD9DB70: the seventh name is the C string "\not used by INI files": a newline character followed by "ot used by INI files" (the author meant
 // "not used"; the escape ate the n). No INI line can name it.
 const char *const theAudioControlNames[] = { "LOOP", "SEQUENTIAL", "RANDOMSTART", "INTERRUPT", "FADE_ON_KILL", "FADE_ON_START", "\not used by INI files", "PLAY_ONE", nullptr };
-// community PR #36 (BFME1 data only): BFME1's control names (lotrbfme.exe 1.03 strings: LOOP, RANDOM, RANDOMSTART, INTERRUPT, FADE_ON_KILL,
-// FADE_ON_START). INFERENCE (S-5017): RANDOM takes RotWK's unused bit 6 (no RotWK code reads it, so a BFME1 event keeps RotWK's random pick, the
-// default without SEQUENTIAL); BFME1's own bit layout was not decoded
-const char *const theBfme1AudioControlNames[] = { "LOOP", "SEQUENTIAL", "RANDOMSTART", "INTERRUPT", "FADE_ON_KILL", "FADE_ON_START", "RANDOM", "PLAY_ONE", nullptr };
+// FAITS CIBLE (lotrbfme.exe, table 0x12A8274) : six noms dans cet ordre, RANDOM au bit 0x02. generateFilename (0x4B3970) teste info + 0x3C & 2 : bit levé, tirage au
+// hasard ; bit baissé, fichier suivant (0x4B3A37). Le bit 0x40 n'existe pas : le ranger là faisait lire à tous les sons « sans dossier ni extension » (AC_NOT_USED_BY_INI).
+const char *const theBfme1AudioControlNames[] = { "LOOP", "RANDOM", "RANDOMSTART", "INTERRUPT", "FADE_ON_KILL", "FADE_ON_START", nullptr };
 const char *const theSubmixSliderNames[] = { "SOUNDFX", "VOICE", "MUSIC", "AMBIENT", "MOVIE", "NONE", nullptr };
 
 namespace

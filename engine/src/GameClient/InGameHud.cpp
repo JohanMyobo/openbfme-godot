@@ -78,11 +78,18 @@ InGameHud::InGameHud(Config config)
 	m_input->context().formations = &m_config.world.formations();
 	// lane SPELLRC-1: a right click (not a drag) ends the spell book power waiting for its target, in the GUI command translator as RotWK's does (RW 0x83D7AD);
 	// the right press itself is the world's (the camera's RMB scroll, RW 0x83DB83 is reached only by the click)
-	m_input->guiCommandTranslator().setHudTargetCancel([this]() {
+	m_input->commandTranslator().setBfme1ClickRoles(isBfme1Data(m_config.fs));
+	m_input->guiCommandTranslator().setHudTargetCancel([this](const ICoord2D &pixel) {
 		// lane OWNERFIX-1: the aim waits while a script has the input off (the right click then cancels nothing; Sol r1 follow-up)
 		if (!m_spellBar.targeting() || !m_input->ui().getInputEnabled())
 		{
 			return false;
+		}
+		if (m_input->commandTranslator().rightClickCarriesTarget())
+		{
+			// FAIT CIBLE BFME1 (lotrbfme.exe 0x9B06F9 .. 0x9B0709) : le clic droit accepte les commandes 0x1F et 0x24 même sans unité contrôlable : il lance le pouvoir ici
+			castSpellAt(pixel);
+			return true;
 		}
 		m_spellBar.cancel();
 		return true;
@@ -324,6 +331,12 @@ bool InGameHud::boot(std::string *error)
 			};
 		}
 		movie.setImage = [pal](const std::string &key, const std::string &image) { pal->setNativeImage(key, image); }; // RW 0x6236DE / 0x623790
+		if (pal->bfme1())
+		{
+			// FAITS CIBLE BFME1 : le niveau s'écrit dans "APT:PalantirHero%dRank" (lotrbfme.exe 0x996081 .. 0x9960E0, le numéro du bouton), que le champ du bouton lit par
+			// rankString = "$Palantir" + _parent._name + "Rank&dropshadow" (Palantir.apt) ; "APT:HeroRank" n'est que le texte d'origine du champ, « Missing string » en français
+			movie.rankRecord = [](int slot) { return "APT:PalantirHero" + std::to_string(slot + 1) + "Rank"; };
+		}
 		movie.setText = [this](const std::string &record, const std::string &text) { m_wm->setAptText(record, text); };
 		std::string faction;
 		if (Player *p = m_config.game.players().getLocalPlayer())
@@ -664,7 +677,7 @@ void InGameHud::update(double seconds)
 	local.context = true;
 	local.contextObject = selected.size() == 1 ? selected.front() : (ObjectID)INVALID_ID;
 	local.commandSet = m_bar->commandSetName();
-	local.portrait = PalantirCommandUI::portraitFor(m_input->context(), local.contextObject, selected);
+	local.portrait = PalantirCommandUI::portraitFor(m_input->context(), local.contextObject, selected, m_palantirRef && m_palantirRef->bfme1());
 	{
 		// lane HUD-5: the rank interface (RW 0x9305CE) and its game texts
 		const PalantirCommandUI::RankInfo rank = PalantirCommandUI::rankInfoFor(m_input->context(), local.contextObject, selected);
@@ -1436,6 +1449,23 @@ void InGameHud::mouseMove(int x, int y, int keyState)
 	m_input->mouseMove(x, y, keyState);
 }
 
+void InGameHud::castSpellAt(const ICoord2D &pixel)
+{
+	Coord3D world;
+	Player *local = m_config.game.players().getLocalPlayer();
+	if (local && m_config.view.screenToTerrain(pixel, m_config.game.logic(), world))
+	{
+		// lane SPELL-4: RW 0x81EAD3 -> 0x81EBE9: an invalid location issues nothing and the targeting goes on
+		if (!m_spellBar.targetValid(m_config.game.logic(), world))
+		{
+			return;
+		}
+		std::vector<GameMessage> out;
+		m_spellBar.clickWorld(world, local->getPlayerIndex(), out);
+		send(out);
+	}
+}
+
 void InGameHud::mouseButton(HudInput::Button button, bool down, int x, int y, int keyState, int timeMs, bool doubleClick)
 {
 	m_keyState = keyState;
@@ -1467,22 +1497,9 @@ void InGameHud::mouseButton(HudInput::Button button, bool down, int x, int y, in
 	// press cancelled the power and was swallowed: no RMB scroll while a spell book power was aimed (the owner, 2026-10-22)
 	if (m_spellBar.targeting() && down && !over && !m_store && m_input->ui().getInputEnabled()) // lane OWNERFIX-1: the aim waits while a script has the input off
 	{
-		if (button == HudInput::Button::Left)
+		if (button == HudInput::Button::Left && !m_input->commandTranslator().rightClickCarriesTarget())
 		{
-			Coord3D world;
-			ICoord2D pixel{ x, y };
-			Player *local = m_config.game.players().getLocalPlayer();
-			if (local && m_config.view.screenToTerrain(pixel, m_config.game.logic(), world))
-			{
-				// lane SPELL-4: RW 0x81EAD3 -> 0x81EBE9: an invalid location issues nothing and the targeting goes on
-				if (!m_spellBar.targetValid(m_config.game.logic(), world))
-				{
-					return;
-				}
-				std::vector<GameMessage> out;
-				m_spellBar.clickWorld(world, local->getPlayerIndex(), out);
-				send(out);
-			}
+			castSpellAt(ICoord2D{ x, y });
 			return;
 		}
 	}

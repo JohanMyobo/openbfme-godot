@@ -972,6 +972,11 @@ bool ScriptActions::executeOrderAction(ScriptEngine &engine, const ScriptActionR
 		});
 		return true;
 	}
+	if (name == "TERRAIN_RENDER_DISABLE")
+	{
+		engine.logic().setTerrainRenderDisabled(param(a, 0).intValue != 0); // notre version, BFME1 : voir GameLogic.h
+		return true;
+	}
 	if (name == "HUMAN_IMPASSABLE_AREA")
 	{
 		// lane BFME2CAMP1: RW 0x7C4040 (area, on): the area by name (RW 0x759194; none: nothing); TheAI's pathfinder (+ 0x10) RW 0x934D51(area, on): the

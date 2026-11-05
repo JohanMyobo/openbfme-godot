@@ -28,7 +28,18 @@ struct NewGameStart
 	std::string mapName;         ///< LiveGame's map name ("map mp evendim") of the cache key
 	int mapPlayerCount = 0;      ///< validated cache count, checked against the loaded map before creating players
 	std::vector<std::string> notes;
+	// notre version, BFME1 (SinglePlayerSkirmishGameInfo) : le camp de la carte que chaque emplacement reprend ; vide : une escarmouche ordinaire (Player_<n>)
+	std::vector<std::string> namedSlots;
 	explicit NewGameStart(RandomAlgorithm algorithm) : random(algorithm) {}
+};
+
+// notre version, BFME1 : un emplacement d'une carte SPS de la campagne (ActCampaignLogic::skirmishSlotsOf)
+struct NamedSlot
+{
+	int slot = 0;
+	std::string name, faction;
+	int startPos = 0, team = -1;
+	bool human = false;
 };
 
 namespace NewGame
@@ -38,5 +49,11 @@ bool mapNameOfKey(const std::string &key, std::string &out);
 // Consumes `in`: false + *error when the mode is not a skirmish, the map is not in the cache, the game has no player, or the random choices cannot be resolved.
 bool prepareNewGame(const NewGameMessage &in, const PlayerTemplateStore &templates, const GameLogicSettings &settings, const std::vector<MapCacheEntry> &maps,
 	RandomAlgorithm algorithm, NewGameStart &out, std::string *error);
+// notre version, BFME1. FAITS CIBLE (lotrbfme.exe) : le message de nouvelle partie du mode 6 (0xA13EF9 ff : SinglePlayerSkirmishGameInfo, carte "maps\\<nom>\\<nom>.map") ; le mode 6
+// compte comme une escarmouche (0x75F0A0 : mode 2 ou 6) ; les bases de départ sont posées par emplacement comme en escarmouche (0x79555B -> 0x78A9F0). Pas de cache de cartes ni de choix
+// au hasard : tout vient du fichier de campagne. La graine vient de timeGetTime (0xA13E1C). Faux + *error pour un camp inconnu, un emplacement doublé, ou aucun joueur humain.
+// FAIT DONNEUR (ZH GameInfo::reset) : l'argent de départ est celui de GameData.
+bool prepareNamedGame(const std::string &mapName, const std::vector<NamedSlot> &slots, const PlayerTemplateStore &templates, RandomAlgorithm algorithm, std::uint32_t seed, int difficulty,
+	int startingCash, NewGameStart &out, std::string *error);
 std::vector<std::string> stopLines();
 } // namespace NewGame

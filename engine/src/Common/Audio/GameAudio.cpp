@@ -55,12 +55,18 @@ bool isStreamType(int soundType)
 }
 } // namespace
 
+void AudioManager::setLocalizedPrefix(const std::string &prefix)
+{
+	m_env.localizedPrefix = prefix;
+}
+
 AudioManager::AudioManager(AudioIniState &ini, AudioAssetCache &cache, IAudioDevice &device, RandomAlgorithm algorithm, std::uint32_t seed)
 	: m_ini(ini), m_cache(cache), m_device(device), m_random(algorithm)
 {
 	m_random.seedRandom(seed);
 	m_env.ini = &m_ini;
 	m_env.random = &m_random;
+	m_env.fileExists = [this](const std::string &path) { return m_cache.exists(path); };
 	const AudioSettings &s = m_ini.settings;
 	m_systemVolume[SLIDER_SOUNDFX] = s.defaultSoundVolume;
 	m_systemVolume[SLIDER_VOICE] = s.defaultVoiceVolume;

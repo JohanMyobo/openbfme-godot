@@ -251,6 +251,8 @@ public:
 	std::vector<std::string> fadingEventNames() const;
 	const AudioReport &report() const { return m_report; }
 	const AudioEventEnv &env() const { return m_env; }
+	void setLocalizedPrefix(const std::string &prefix); ///< notre version, BFME1 : lang\\<langue>\\ (lotrbfme.exe 0x4B33F0)
+	void setBfme1Control(bool on) { m_env.bfme1Control = on; } ///< notre version, BFME1 : le sens du bit RANDOM de Control (lotrbfme.exe 0x4B3A37)
 	GameLogicRandom &audioRandom() { return m_random; }
 	AudioIniState &ini() { return m_ini; }
 	// The effective volume the manager would give `event` now (RW getEffectiveVolume), for tests and the viewer.

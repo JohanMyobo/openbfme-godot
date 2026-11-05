@@ -34,7 +34,7 @@
 namespace PalantirCommandUI
 {
 // the portrait image name of a selection ("" none). `contextObject`: the control bar's context object (INVALID_ID: none, the selection decides).
-std::string portraitFor(const HudContext &ctx, ObjectID contextObject, const std::vector<ObjectID> &selected);
+std::string portraitFor(const HudContext &ctx, ObjectID contextObject, const std::vector<ObjectID> &selected, bool bfme1 = false);
 // the portrait of one object (Create-a-Hero model-state PortraitImageName, otherwise SelectPortrait; "" none)
 std::string objectPortrait(const Object &obj);
 

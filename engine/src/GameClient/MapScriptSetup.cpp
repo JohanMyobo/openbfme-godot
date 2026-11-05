@@ -153,11 +153,12 @@ bool MapScriptSetup::loadLibrary(ArchiveFileSystem &fs, const std::string &path,
 }
 
 bool MapScriptSetup::build(ArchiveFileSystem &fs, const SkirmishAIStore &aiStore, const SidesList &sides, const LoadedMap &map,
-	const std::set<std::string> &droppedMapSides, const std::vector<std::string> &aiTypes, std::string *error)
+	const std::set<std::string> &droppedMapSides, const std::vector<std::string> &aiTypes, std::string *error, const std::set<std::string> &teamSides)
 {
 	m_sides.clear();
 	m_libraryTeams.clear();
 	m_teamSides = droppedMapSides;
+	m_teamSides.insert(teamSides.begin(), teamSides.end());
 	m_sides.resize(sides.sides.size());
 	for (size_t i = 0; i < sides.sides.size(); ++i)
 	{

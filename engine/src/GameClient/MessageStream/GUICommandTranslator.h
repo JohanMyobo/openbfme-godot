@@ -41,7 +41,7 @@ public:
 	// RotWK's GUI command translator (RW 0x83D7AD) ends a waiting command on a right click that was not dragged (MSG_MOUSE_RIGHT_CLICK / _DOUBLE_CLICK with
 	// + 0x30 clear: setGUICommand(0) at RW 0x83DB8D, the click destroyed); a right drag leaves it waiting and the raw press reaches the LookAt translator (the
 	// camera's RMB scroll). The hook answers whether such a power was waiting and cancels it
-	void setHudTargetCancel(std::function<bool()> cancel) { m_hudTargetCancel = std::move(cancel); }
+	void setHudTargetCancel(std::function<bool(const ICoord2D &)> cancel) { m_hudTargetCancel = std::move(cancel); }
 
 	// guard modes (ZH GuardMode)
 	enum GuardMode
@@ -56,7 +56,7 @@ private:
 
 	HudContext &m_ctx;
 	const CommandTranslator &m_commands;
-	std::function<bool()> m_hudTargetCancel; ///< lane SPELLRC-1
+	std::function<bool(const ICoord2D &)> m_hudTargetCancel; ///< lane SPELLRC-1
 	ICoord2D m_leftAnchor{ 0, 0 };           ///< 0x004314B1 + 0x04: the left press's pixel
 	bool m_leftDragged = false;              ///< 0x004314B1 + 0x14: the pointer left the drag tolerance since the left press
 	ICoord2D m_rightAnchor{ 0, 0 };          ///< lane SPELLRC-1: RW 0x83D7AD + 0x20: the right press's pixel

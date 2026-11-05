@@ -58,6 +58,9 @@ public:
 
 	// the standard (false) or alternate (true) mouse setup: which button issues the order (GlobalData m_useAlternateMouse; RotWK's default is true, RW 0x642A4B: the right click orders; lane PLAY-1)
 	void setUseAlternateMouse(bool on) { m_alternateMouse = on; }
+	// notre version, BFME1 (lotrbfme.exe 0x9B0690 / 0x9B0800) : le clic droit exécute aussi une commande en attente de cible, le gauche n'y touche pas
+	void setBfme1ClickRoles(bool on) { m_bfme1ClickRoles = on; }
+	bool rightClickCarriesTarget() const { return m_bfme1ClickRoles && m_alternateMouse; }
 	bool useAlternateMouse() const { return m_alternateMouse; }
 	// a right click on the radar: the selection moves to the ground point (a plain MSG_DO_MOVETO, the same message a click on the map issues)
 	void issueRadarMove(const Coord3D &world) { m_ctx.stream.append(MSG_DO_MOVETO).appendLocation(world); }
@@ -107,6 +110,7 @@ private:
 	HudContext &m_ctx;
 	bool m_teamExists = false;
 	bool m_alternateMouse = false;
+	bool m_bfme1ClickRoles = false;
 	ICoord2D m_rightAnchor{}, m_rightLift{};
 	int m_rightDown = 0, m_rightUp = 0;
 	bool m_rightDragged = false; // lane BUILD-5: RotWK CommandTranslator + 0x2C

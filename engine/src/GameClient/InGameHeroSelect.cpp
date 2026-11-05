@@ -412,6 +412,11 @@ std::string InGameHeroSelect::slotKey(int slot, const char *suffix) const
 	return commandPrefix() + "_Hero" + std::to_string(slot + 1) + suffix; // RW 0xC7EF38 / 0xC7EEF0
 }
 
+std::string InGameHeroSelect::rankRecord(int slot) const
+{
+	return m_movie.rankRecord ? m_movie.rankRecord(slot) : "APT:" + slotKey(slot, "Rank");
+}
+
 bool InGameHeroSelect::movieCall(const std::string &function, const std::vector<std::string> &args)
 {
 	return m_movie.call && m_movie.call(function, args);
@@ -524,7 +529,7 @@ void InGameHeroSelect::update()
 		{
 			if (m_movie.setText)
 			{
-				m_movie.setText("APT:" + slotKey(0, "Rank"), std::to_string(count)); // UnicodeString::format(L"%d")
+				m_movie.setText(rankRecord(0), std::to_string(count)); // UnicodeString::format(L"%d")
 			}
 			s.rank = count;
 		}
@@ -620,7 +625,7 @@ void InGameHeroSelect::update()
 			{
 				if (m_movie.setText)
 				{
-					m_movie.setText("APT:" + slotKey(slotIndex, "Rank"), std::to_string(rank));
+					m_movie.setText(rankRecord(slotIndex), std::to_string(rank));
 				}
 				s.rank = rank;
 			}

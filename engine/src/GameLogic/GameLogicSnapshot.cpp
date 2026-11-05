@@ -214,7 +214,8 @@ void GameLogic::xferCore(Xfer &x)
 	// version 3 on feature/wotr before the archive merge: never released). Each version is written only when its state is there, so every other game's
 	// snapshot is byte-identical to version 1's (an older snapshot loads with none of the later state)
 	const bool campaignState = !m_buildableOverrides.empty() || m_campaignCarryover.has_value();
-	XferVersion v{ 1, (std::uint8_t)(x.isLoading() || m_livingWorldTags.inUse() ? 4 : campaignState ? 3 : m_cheatMode.enabled() ? 2 : 1) };
+	// notre version, BFME1 : version 5, le drapeau de rendu du terrain, écrit seulement quand il est levé
+	XferVersion v{ 1, (std::uint8_t)(x.isLoading() || terrainRenderDisabled() ? 5 : m_livingWorldTags.inUse() ? 4 : campaignState ? 3 : m_cheatMode.enabled() ? 2 : 1) };
 	x.xferVersion(v);
 	x.xferUnsignedInt(&m_frame);
 	x.xferBool(&m_frameAdvance);
@@ -318,6 +319,16 @@ void GameLogic::xferCore(Xfer &x)
 	else if (x.isLoading())
 	{
 		m_livingWorldTags.clear();
+	}
+	if (v.current >= 5)
+	{
+		bool disabled = terrainRenderDisabled();
+		x.xferBool(&disabled);
+		setTerrainRenderDisabled(disabled);
+	}
+	else if (x.isLoading())
+	{
+		setTerrainRenderDisabled(false);
 	}
 }
 

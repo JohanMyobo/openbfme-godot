@@ -78,6 +78,7 @@ public:
 	bool is_mounted() const { return m_mounted; }
 	bool is_shell_source() const { return m_shellSource; }
 	String install_root() const;
+	const std::string &bfme1LanguageDir() const { return m_bfme1LanguageDir; }
 	bool file_exists(const String &path) const;
 	PackedByteArray read_file(const String &path);
 	String get_archive_for_file(const String &path) const;
@@ -135,6 +136,7 @@ private:
 	std::string m_installRoot;
 	bool m_bfme1 = false;
 	std::string m_bfme1Root;
+	std::string m_bfme1LanguageDir; // notre version : "lang/french/", le dossier de la langue installée
 	String m_lastError;
 	std::vector<LooseFileFinding> m_loose;
 	std::vector<MountedArchive> m_mountedArchives;

@@ -54,6 +54,35 @@ struct Result
 	std::vector<std::string> errors;
 	std::vector<std::string> notes; // lane WOTR-1: what retail skips without an error (a War of the Ring building whose build plot the map lacks), reported
 };
+// notre version, BFME1 : l'armée de la campagne qui entre dans la mission (GameLogic +0x170, le gestionnaire d'armées). FAITS CIBLE (lotrbfme.exe) :
+//   * 0x795E76, fin de startNewGame, partie de campagne (0xA0D3D0) hors sauvegarde : 0x767470 cherche le créneau d'armée dont le nom est TheGameLogic +0x174, puis
+//     0x767010(créneau, direction +0x178, vrai) : entrées triées (0x41E56F, non lu), une passe pour les gabarits HERO (bit 89 du KindOf, +0xD0 bit 25), une passe pour les autres ;
+//     une entrée Default (+0x38) n'est prise que si SurvivalThreshhold (+0x44) dépasse la somme des quantités non Default (0x760F10). Le budget est celui des points de commande
+//     libres du joueur local (0x41AF23 -> 0x4C7C30) : un héros passe toujours, les autres sont bornés par budget / CommandPoints (+0x4B4), et chaque entrée le réduit.
+//   * 0x763E30 : ThingFactory::newObject sur l'équipe par défaut du joueur local (+0x230), sans position.
+//   * 0x760400 (Open-BFME-1 BfmeOneHundredOne.cpp, moveObjects) : InitialWalkOnSpawnPoint / InitialWalkOnGatherPoint (0x75FFD0), sinon <axe>ArmySpawnPoint / <axe>ArmyGatherPoint
+//     (0x430CB0) avec l'axe de la direction (Top, Left, Right, Bottom : |x| > |y| : x > 0 Left sinon Right ; sinon y > 0 Top sinon Bottom). Sans ces points, plus rien : les objets
+//     restent où ils sont nés. Sinon le groupe est posé au point d'entrée et marche vers le point de rassemblement.
+// Le contenu de l'armée vient de LivingWorld::ActCampaignLogic::walkOnArmyOf.
+// INFÉRENCE (S-1329, comme callInLivingWorldArmy) : la formation WalkOnTemplate (0x42059A) n'est pas portée, armySlot tient lieu de rangs ; chaque unité marche seule.
+// Non porté : la couleur de l'armée (Color / NightColor, 0x761250), le tri des entrées, l'argent et les sciences de la campagne donnés au joueur (0x767470), les armées appelées
+// en renfort (0x767330) et les actions TEAM_ASSIMILATE_* (514, 515, 540 à 542).
+struct WalkOnEntry
+{
+	std::string thingTemplate;
+	int quantity = 0;
+	bool isDefault = false;
+};
+struct WalkOnArmy
+{
+	std::string name;
+	std::vector<WalkOnEntry> entries;
+	int survivalThreshhold = 0;
+	float directionX = 0.0f, directionY = 0.0f;
+};
+void placeInitialWalkOn(GameLogic &logic, Player &player, const WalkOnArmy &army, Result &result);
+// 0x4300A0 (Open-BFME-1 bfmeAxisOf) -> 0x7601A0 : le préfixe des points d'entrée d'une direction
+std::string walkOnAxisName(float directionX, float directionY);
 // RW 0x62AC17 for one slot (`slotNum` is its index); the placed objects and every problem are in `result` (never silent)
 void placeForPlayer(GameLogic &logic, int slotNum, const SkirmishGameSlot &slot, Player &player, const PlayerTemplate &pt, Result &result);
 // lane WOTR-1: a War of the Ring battle's slot (RW 0x629F34 instead of the starting base): the region owner's buildings on Player_1_BuildPlot_<n>, then the slot's army

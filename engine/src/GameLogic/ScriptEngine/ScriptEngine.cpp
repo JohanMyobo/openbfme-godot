@@ -2222,6 +2222,7 @@ void ScriptEngine::addEndRequest(bool victory, const std::string &action)
 	e.playerIndex = m_currentPlayer ? m_currentPlayer->getPlayerIndex() : -1;
 	e.victory = victory;
 	e.action = action;
+	e.script = currentScriptName();
 	m_endRequests.push_back(e);
 }
 

@@ -69,7 +69,7 @@ std::string objectPortrait(const Object &obj)
 	return std::string();
 }
 
-std::string portraitFor(const HudContext &ctx, ObjectID contextObject, const std::vector<ObjectID> &selected)
+std::string portraitFor(const HudContext &ctx, ObjectID contextObject, const std::vector<ObjectID> &selected, bool bfme1)
 {
 	if (contextObject != (ObjectID)INVALID_ID)
 	{
@@ -125,6 +125,20 @@ std::string portraitFor(const HudContext &ctx, ObjectID contextObject, const std
 	{
 		if (const Player *owner = team->getControllingPlayer())
 		{
+			if (bfme1)
+			{
+				// FAITS CIBLE BFME1 (lotrbfme.exe 0x996E85 .. 0x99703C) : une table en dur du camp vers l'image, MultiPortrait quand le camp n'y est pas. INFÉRENCE : le joueur
+				// + 0x28 lu en 0x997015 est son camp (la clé de la table est un nom de camp)
+				const std::string &side = owner->getSide();
+				for (const char *known : { "Mordor", "Gondor", "Isengard", "Rohan" })
+				{
+					if (side == known)
+					{
+						return "UP" + side + "_Army";
+					}
+				}
+				return "MultiPortrait";
+			}
 			if (const PlayerTemplate *pt = owner->getPlayerTemplate())
 			{
 				if (!pt->m_multiSelectionPortrait.empty())
