@@ -212,6 +212,8 @@ public:
 	Object *preBuildForScript(const ThingTemplate &tt) { return preBuild(tt, -2, false); }
 	// RW 0x79A688 : l'emplacement libre le plus proche (mode 0) ou le plus loin (mode 1) de pos le bâtit ; autre mode : rien
 	Object *preBuildNear(const ThingTemplate &tt, const Coord3D &pos, int mode);
+	// RW 0x7996D3 : déployé (+0x34 == 4) et un emplacement de la liste de preBuild libre (présent, pas WALL_UPGRADE, avec fondation, inoccupé)
+	bool hasFreePadFor(const ThingTemplate &tt) const;
 	// lane CASTLE-1: the stop lines S-950 .. S-952 (in GameLogic::report through BuildStops)
 	static std::vector<std::string> stopLines();
 

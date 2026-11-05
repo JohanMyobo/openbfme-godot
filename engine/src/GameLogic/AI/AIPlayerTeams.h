@@ -29,7 +29,8 @@
 //     quand l'équipe en a un, sinon 100000) puis, s'il en manque et qu'il n'est pas facultatif, startTraining RW 0x8F69E8 : une usine libre
 //     (RW 0x8F5347), canQueueCreateUnit (vslot 0x44) = 0, un ProductionID, queueCreateUnit(type, -1, id, -1, 0, "", 0), l'usine notée (+ 0x8) ;
 //   * checkQueuedTeams RW 0x8F5FD8 : le délai de construction (prototype + 0x1F8 ; < 1 : jamais) passé, une équipe au minimum construite et sans
-//     unité en production passe prête (RW 0x79FE29(0)), sinon elle est rendue à l'équipe par défaut (RW 0x7A12F4) ; puis une équipe entièrement
+//     unité en production passe prête (RW 0x79FE29(0)), sinon ses membres vont à l'équipe par défaut (RW 0x7A12F4) et le destructeur de
+//     TeamInQueue (RW 0x8F4F8A) l'active, vide (TeamPrototype::updateState la supprime) ; puis une équipe entièrement
 //     construite (RW 0x8F4FF0 : les ordres non facultatifs complets, au moins une unité) passe prête ;
 //   * checkReadyTeams RW 0x8F7949 : prête quand ses membres sont au repos (RW 0x7A090C) ou 60 s après son début ; elle est activée (+ 0x5D / + 0x5E).
 //   * acquireEnemy RW 0x8F457D : l'ennemi courant (+ 0xA0) vivant et actif est gardé ; sinon parmi les joueurs ENNEMIS (RW 0x6ADBEB) qui ont des
@@ -73,6 +74,8 @@ public:
 	// RW 0x758AB1 « <This Player's Enemy> » -> Player::getCurrentEnemy (RW 0x6AA5F5) -> AISkirmishPlayer::getAiEnemy (RW 0x8F47EB) : toutes les
 	// 5 s acquireEnemy (RW 0x8F457D) ; null pour un joueur sans IA
 	Player *currentEnemy(Player &p);
+	// la priorité de production courante du prototype (prototype + 0x21C : la valeur du dict, puis les hausses / baisses de l'IA)
+	int &priority(TeamPrototype &proto);
 
 private:
 	struct WorkOrder
@@ -115,7 +118,6 @@ private:
 	bool startTraining(Player &p, WorkOrder &order);
 	Object *findFactory(Player &p, const ThingTemplate &thing, bool busyOK);
 	Object *tryToRecruit(Team &team, const ThingTemplate &thing, const Coord3D &pos, float radius);
-	int &priority(TeamPrototype &proto);
 	void endTeam(TeamInQueue &t, bool success);
 	void acquireEnemy(PlayerAI &ai, Player &p);
 	PlayerAI *find(const Player &p);

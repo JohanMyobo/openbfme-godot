@@ -667,6 +667,11 @@ bool ScriptConditions::equivalentTemplates(const ThingTemplate *a, const ThingTe
 	return equivalentTemplatesImpl(a, b);
 }
 
+bool ScriptConditions::teamHasAnyUnits(const Team &t)
+{
+	return ::teamHasAnyUnits(t);
+}
+
 // RW 0x96E85F: a type parameter names an object list of the engine (RW 0x759158) or one type; the names, in order
 std::vector<std::string> ScriptConditions::typeNames(ScriptEngine &engine, const std::string &parameter)
 {

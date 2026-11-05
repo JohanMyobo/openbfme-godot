@@ -778,7 +778,9 @@ TEST_CASE("camp1h team activation: an inactive singleton or an empty prototype a
 	e.updateTeamStates();
 	CHECK_FALSE(a->scriptState().created);
 	CHECK(a->scriptState().ready);
-	CHECK(b->scriptState().ready);
+	// notre version : TeamPrototype::updateState (RW 0x7A676D) met ses équipes à jour puis supprime celles qui sont actives, vides et pas l'équipe par
+	// défaut de leur joueur : l'instance vide `b` disparaît (le singleton `a` est gardé)
+	CHECK(emptyPrototype->teams().empty());
 }
 
 // lane CAMP-1H: every Angmar mission (the campaign's and the bonus one) run twice with no player input agrees on every frame's state hash: the map scripts,

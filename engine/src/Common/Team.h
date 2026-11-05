@@ -55,6 +55,7 @@ public:
 	// ZH Team::getRelationship: a team override, then an override for that team's player, then the controlling player's view
 	Relationship getRelationship(const Team *that) const;
 	void setTeamRelationship(const Team *that, Relationship r);
+	void removeTeamRelationship(TeamID that) { m_teamRelations.erase(that); }
 	void setPlayerRelationship(const Player *that, Relationship r);
 	// lane SCRIPT-2: RW 0x7A54BC / 0x7A5512 (TEAM_REMOVE_ALL_OVERRIDE_RELATIONS): the team and the player overrides cleared
 	void removeAllRelationshipOverrides()
@@ -240,6 +241,13 @@ public:
 	// ZH TeamFactory::findTeam: the first team of the prototype with that name
 	Team *findTeam(const std::string &name);
 	Team *findTeamByID(TeamID id) const;
+	// notre version : TeamPrototype::updateState (RW 0x7A676D), après la mise à jour de ses équipes : depuis la tête de la liste (la plus récente), une
+	// équipe sans membre (+ 0x38), d'un prototype non singleton (+ 0x18 bit 0), qui n'est pas l'équipe par défaut de son joueur (+ 0x30C) et active
+	// (+ 0x5D) est supprimée (deleteTeam), et le parcours repart de la tête
+	void deleteDeadTeams(TeamPrototype &proto, PlayerList &players);
+	// RW 0x7A6309 TeamFactory::teamAboutToBeDeleted : chaque équipe de chaque prototype oublie sa relation vers elle (RW 0x7A58B5), chaque joueur
+	// aussi (RW 0x6A8523, les 20 joueurs) ; puis le destructeur la sort de la liste de son prototype et de celle de la fabrique
+	void deleteTeam(Team *t, PlayerList &players);
 	const std::vector<std::unique_ptr<TeamPrototype>> &prototypes() const { return m_prototypes; }
 	size_t teamCount() const { return m_teams.size(); } ///< lane SAVE-4e (tests)
 
@@ -258,7 +266,7 @@ public:
 private:
 	std::vector<std::unique_ptr<TeamPrototype>> m_prototypes;
 	std::multimap<std::string, size_t> m_byName; ///< case sensitive, like NAMEKEY; lane SCRIPT-2: one name per OWNER (RW 0x7A2C47 keys by both)
-	std::deque<Team> m_teams;               ///< stable addresses, creation order
+	std::deque<std::unique_ptr<Team>> m_teams; ///< stable addresses, creation order (notre version : une équipe peut en sortir, deleteTeam)
 	TeamID m_nextTeamID = 1;
 	int m_nextPrototypeID = 1;
 	size_t m_loadedTeamCount = (size_t)-1; ///< lane SAVE-4e: the teams the snapshot being loaded holds (-1: no load)

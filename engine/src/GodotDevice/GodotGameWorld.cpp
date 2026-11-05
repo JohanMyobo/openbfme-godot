@@ -66,6 +66,7 @@
 #include "GameLogic/GameMessage.h"
 #include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/AI/AIWorld.h"
+#include "GameLogic/AI/AIAttack.h" // DBGPROBE
 #include "GameLogic/GameMessage.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/DozerAIUpdate.h"
@@ -2746,6 +2747,25 @@ Dictionary GameWorld::get_object(int64_t id) const
 		d["horde_porcupine"] = hc->hordeData().m_isPorcupineFormation;
 		const ThingTemplate *next = hc->alternateFormationTemplate();
 		d["horde_next_formation"] = next ? toGodot(next->getName()) : String();
+	}
+	// DBGPROBE
+	if (const ExperienceTracker *xt = o->getExperienceTracker())
+	{
+		d["xp"] = xt->getExperience();
+		d["rank"] = (int64_t)xt->getRank();
+	}
+	if (const AIUpdateInterface *ai = const_cast<::Object *>(o)->getAIUpdateInterface())
+	{
+		d["ai_state"] = (int64_t)ai->currentStateId();
+		d["ai_attacking"] = ai->isAttacking();
+		d["ai_victim"] = ai->currentVictim() ? (int64_t)ai->currentVictim()->getID() : (int64_t)0;
+		if (ai->stateMachineOrNull())
+		{
+			if (const AIAttackState *as = dynamic_cast<const AIAttackState *>(ai->stateMachineOrNull()->currentState()))
+			{
+				d["ai_attack_sub"] = as->attackMachine() ? (int64_t)as->attackMachine()->currentStateId() : (int64_t)-1;
+			}
+		}
 	}
 	d["destroyed"] = o->isDestroyed();
 	{

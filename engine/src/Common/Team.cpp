@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "Common/Player.h"
+#include "Common/PlayerList.h"
 #include "Common/StateHash.h"
 #include "Common/Xfer.h"
 #include "GameLogic/Object/Object.h"
@@ -222,8 +223,8 @@ Team *TeamFactory::createTeam(TeamPrototype *proto, bool activate)
 		}
 		return t;
 	}
-	m_teams.emplace_back(proto, m_nextTeamID++);
-	Team *t = &m_teams.back();
+	m_teams.push_back(std::unique_ptr<Team>(new Team(proto, m_nextTeamID++)));
+	Team *t = m_teams.back().get();
 	proto->m_teams.push_back(t);
 	// lane CAMP-1H: the constructor (RW 0x7A6C91 -> RW 0x7A6E0D): + 0x60 when the prototype has an EnemySighted (+ 0x1FC) or AllClear (+ 0x200) script
 	const TeamTemplateScripts &ts = proto->templateScripts();
@@ -311,14 +312,68 @@ Team *TeamFactory::findTeamByID(TeamID id) const
 	{
 		return nullptr;
 	}
-	for (const Team &t : m_teams)
+	for (const std::unique_ptr<Team> &t : m_teams)
 	{
-		if (t.getID() == id)
+		if (t->getID() == id)
 		{
-			return const_cast<Team *>(&t);
+			return t.get();
 		}
 	}
 	return nullptr;
+}
+
+void TeamFactory::deleteTeam(Team *t, PlayerList &players)
+{
+	const TeamID id = t->getID();
+	for (const std::unique_ptr<TeamPrototype> &proto : m_prototypes) // RW 0x7A58B5
+	{
+		for (Team *other : proto->m_teams)
+		{
+			other->removeTeamRelationship(id);
+		}
+	}
+	for (int i = 0; i < players.getPlayerCount(); ++i) // RW 0x6A8523
+	{
+		if (Player *p = players.getNthPlayer(i))
+		{
+			p->removeTeamRelationship(t);
+		}
+	}
+	std::vector<Team *> &list = t->getPrototype()->m_teams;
+	list.erase(std::remove(list.begin(), list.end(), t), list.end());
+	for (auto it = m_teams.begin(); it != m_teams.end(); ++it)
+	{
+		if (it->get() == t)
+		{
+			m_teams.erase(it);
+			break;
+		}
+	}
+}
+
+void TeamFactory::deleteDeadTeams(TeamPrototype &proto, PlayerList &players)
+{
+	if (proto.getIsSingleton())
+	{
+		return;
+	}
+	bool again = true;
+	while (again)
+	{
+		again = false;
+		for (auto it = proto.m_teams.rbegin(); it != proto.m_teams.rend(); ++it) // la tête de la liste de retail : la plus récente
+		{
+			Team *t = *it;
+			Player *owner = t->getControllingPlayer();
+			if (t->getFirstMember() || (owner && owner->getDefaultTeam() == t) || !t->isActive())
+			{
+				continue;
+			}
+			deleteTeam(t, players);
+			again = true;
+			break;
+		}
+	}
 }
 
 void TeamFactory::crc(StateHasher &h) const
@@ -340,9 +395,9 @@ void TeamFactory::crc(StateHasher &h) const
 		}
 	}
 	h.addU32((std::uint32_t)m_teams.size());
-	for (const Team &t : m_teams)
+	for (const std::unique_ptr<Team> &t : m_teams)
 	{
-		t.crc(h);
+		t->crc(h);
 	}
 }
 
@@ -458,8 +513,8 @@ void TeamFactory::xfer(Xfer &x)
 	}
 	for (std::uint32_t i = 0; i < teams; ++i)
 	{
-		std::uint32_t id = i < m_teams.size() ? m_teams[i].getID() : 0;
-		std::int32_t proto = i < m_teams.size() ? m_teams[i].getPrototype()->getID() : 0;
+		std::uint32_t id = i < m_teams.size() ? m_teams[i]->getID() : 0;
+		std::int32_t proto = i < m_teams.size() ? m_teams[i]->getPrototype()->getID() : 0;
 		x.xferUnsignedInt(&id);
 		x.xferInt(&proto);
 		if (!x.isLoading())
@@ -468,10 +523,10 @@ void TeamFactory::xfer(Xfer &x)
 		}
 		if (i < m_teams.size())
 		{
-			if (id != m_teams[i].getID() || proto != m_teams[i].getPrototype()->getID())
+			if (id != m_teams[i]->getID() || proto != m_teams[i]->getPrototype()->getID())
 			{
 				throw XferException("the snapshot's team " + std::to_string(i) + " is " + std::to_string(id) + " of prototype " + std::to_string(proto)
-					+ ", this game's is " + std::to_string(m_teams[i].getID()) + " of prototype " + std::to_string(m_teams[i].getPrototype()->getID()));
+					+ ", this game's is " + std::to_string(m_teams[i]->getID()) + " of prototype " + std::to_string(m_teams[i]->getPrototype()->getID()));
 			}
 			continue;
 		}
@@ -484,16 +539,16 @@ void TeamFactory::xfer(Xfer &x)
 		{
 			throw XferException("the snapshot's team " + std::to_string(id) + " of prototype " + std::to_string(proto) + " cannot be created");
 		}
-		m_teams.emplace_back(tp, id);
-		tp->m_teams.push_back(&m_teams.back());
+		m_teams.push_back(std::unique_ptr<Team>(new Team(tp, id)));
+		tp->m_teams.push_back(m_teams.back().get());
 	}
 	if (x.isLoading()) // lane SAVE-4e (closed sets): the id counters are past every team and prototype (a lower one would issue an id twice)
 	{
 		for (size_t i = 0; i < m_teams.size() && i < teams; ++i)
 		{
-			if (m_teams[i].getID() >= m_nextTeamID)
+			if (m_teams[i]->getID() >= m_nextTeamID)
 			{
-				throw XferException("the snapshot's next team id " + std::to_string(m_nextTeamID) + " is not past team " + std::to_string(m_teams[i].getID()));
+				throw XferException("the snapshot's next team id " + std::to_string(m_nextTeamID) + " is not past team " + std::to_string(m_teams[i]->getID()));
 			}
 		}
 		for (const std::unique_ptr<TeamPrototype> &tp : m_prototypes)
@@ -506,8 +561,9 @@ void TeamFactory::xfer(Xfer &x)
 		}
 	}
 	size_t stated = 0;
-	for (Team &t : m_teams)
+	for (const std::unique_ptr<Team> &tp : m_teams)
 	{
+		Team &t = *tp;
 		if (stated >= teams) // a load: a team past the snapshot's; a save: past the pending load's (see above)
 		{
 			if (x.isLoading())
@@ -528,8 +584,9 @@ void TeamFactory::loadPostProcess(const std::function<Object *(ObjectID)> &findO
 	std::vector<std::vector<Object *>> members(m_teams.size());
 	std::map<ObjectID, TeamID> listedIn;
 	size_t i = 0;
-	for (Team &t : m_teams)
+	for (const std::unique_ptr<Team> &tp : m_teams)
 	{
+		Team &t = *tp;
 		const std::string team = "team " + std::to_string(t.getID()) + " '" + t.getName() + "'";
 		for (ObjectID id : t.m_loadedMembers)
 		{
@@ -553,27 +610,27 @@ void TeamFactory::loadPostProcess(const std::function<Object *(ObjectID)> &findO
 		++i;
 	}
 	// then every list emptied and each team's members linked in their saved order
-	for (Team &t : m_teams)
+	for (const std::unique_ptr<Team> &t : m_teams)
 	{
-		while (Object *o = t.getFirstMember())
+		while (Object *o = t->getFirstMember())
 		{
-			t.friend_removeMember(o);
+			t->friend_removeMember(o);
 		}
 	}
 	i = 0;
-	for (Team &t : m_teams)
+	for (const std::unique_ptr<Team> &t : m_teams)
 	{
 		for (Object *o : members[i])
 		{
-			t.friend_addMember(o);
+			t->friend_addMember(o);
 		}
-		t.m_loadedMembers.clear();
+		t->m_loadedMembers.clear();
 		++i;
 	}
 	// lane SAVE-4e: the teams past the snapshot's (see xfer) go, last first; each must be empty
 	while (m_loadedTeamCount != (size_t)-1 && m_teams.size() > m_loadedTeamCount)
 	{
-		Team &t = m_teams.back();
+		Team &t = *m_teams.back();
 		if (t.getFirstMember())
 		{
 			throw XferException("team " + std::to_string(t.getID()) + " '" + t.getName() + "', past the snapshot's teams, still has a member");
@@ -589,9 +646,9 @@ void TeamFactory::loadPostProcess(const std::function<Object *(ObjectID)> &findO
 std::vector<std::vector<ObjectID>> TeamFactory::friend_loadedMembers() const
 {
 	std::vector<std::vector<ObjectID>> out;
-	for (const Team &t : m_teams)
+	for (const std::unique_ptr<Team> &t : m_teams)
 	{
-		out.push_back(t.m_loadedMembers);
+		out.push_back(t->m_loadedMembers);
 	}
 	return out;
 }
@@ -603,8 +660,8 @@ void TeamFactory::friend_setLoadedMembers(const std::vector<std::vector<ObjectID
 		throw XferException("the teams' loaded members are of " + std::to_string(members.size()) + " teams, the game has " + std::to_string(m_teams.size()));
 	}
 	size_t i = 0;
-	for (Team &t : m_teams)
+	for (const std::unique_ptr<Team> &t : m_teams)
 	{
-		t.m_loadedMembers = members[i++];
+		t->m_loadedMembers = members[i++];
 	}
 }

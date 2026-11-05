@@ -59,4 +59,6 @@ public:
 	static bool equivalentTemplates(const ThingTemplate *a, const ThingTemplate *b);
 	// the live members of a team, in member order
 	static std::vector<Object *> members(const Team &t);
+	// RW 0x7A0956(0) : un membre vivant, pas DESTROYED, ni PROJECTILE / INERT / IGNORE_FOR_VICTORY
+	static bool teamHasAnyUnits(const Team &t);
 };

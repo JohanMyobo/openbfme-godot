@@ -4,10 +4,13 @@
 
 #include "GameLogic/AI/AIGuard.h"
 
+#include <stdexcept>
+
 #include "Common/GameCommon.h"
 #include "Common/Player.h"
 #include "Common/StateHash.h"
 #include "Common/Team.h"
+#include "GameLogic/AI/AIGarrisonStates.h"
 #include "GameLogic/AI/AIHunt.h"
 #include "GameLogic/Combat/CombatNames.h"
 #include "GameLogic/Combat/CombatState.h"
@@ -780,6 +783,35 @@ void AIUpdateInterface::guardHere(int mode)
 	m_guardAngle = obj->getOrientation();
 	m_machine->setState(AI_GUARD);
 	wakeUpNow();
+}
+
+// notre version : AI command 0x1E (RW 0x771790 -> aiDoCommand RW 0x66AE4A -> vslot 0xFC privateGuardPosition RW 0x6649C6). DONOR: the BFME2 decomp's
+// AIUpdateInterfacePrivateGuardPosition.cpp (BFME2 0x00264BC2, the same body; ZH AIUpdate.cpp privateGuardPosition)
+bool AIUpdateInterface::aiGuardPosition(const Coord3D &pos, int mode, CommandSourceType source)
+{
+	if (!acceptCommand(source, 0x1E))
+	{
+		return false; // RW 0x667174
+	}
+	Object &obj = *getObject();
+	if (obj.testStatus((unsigned)CombatNames::statuses().hordeMember) || !GarrisonRules::isMobile(obj) ||
+		obj.isKindOf((unsigned)CombatNames::kinds().projectile))
+	{
+		return false; // RW 0x6649DE .. 0x664A00
+	}
+	if (source == CMD_FROM_PLAYER)
+	{
+		// RW 0x664A3D .. 0x664A90: a player's position outside TheTerrainLogic's extent (vslot 0x20) goes to its closest edge point (vslot 0x34), not ported
+		throw std::logic_error("aiGuardPosition: a player's guard order (the terrain edge clip RW 0x664A3D is not ported)");
+	}
+	// RW 0x664A06 .. 0x664A12: + 0x54 == 4 (none) becomes LOCATION, else + 0x50 does. INFERENCE: the port's + 0x54 never holds 4 and it keeps no + 0x50
+	m_guardLocation = pos; // + 0x58
+	m_guardMode = mode;    // + 0x4C
+	m_machine->clear();    // vslot 0x14
+	setLastCommandSource(source);
+	m_machine->setState(AI_GUARD);
+	wakeUpNow();
+	return true;
 }
 
 void AIUpdateInterface::stancesOnCommand(CommandSourceType source)

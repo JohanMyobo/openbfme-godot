@@ -20,9 +20,12 @@
 #include "GameLogic/ScriptEngine/Scripts.h"
 #include "GameLogic/ScriptEngine/ScriptConditions.h"
 #include "Common/Team.h"
+#include "Common/Thing/KindOfTokens.h" // DBGAI
 #include "GodotDevice/GodotRetailFileSystem.h"
 
 #include <godot_cpp/core/class_db.hpp>
+
+extern std::map<std::string, std::pair<int, int>> g_dbgScriptFires; // DBGAI (sonde locale, non commitée)
 
 using namespace godot;
 
@@ -538,6 +541,86 @@ Dictionary GameWorld::get_script_report() const
 	d["unported_actions"] = counts(s.unportedActions);
 	d["client_requests"] = counts(s.clientRequests);
 	d["notes"] = counts(s.notes);
+	{ // DBGAI (sonde locale, non commitée)
+		Dictionary f;
+		for (const auto &kv : e.allFlags())
+		{
+			if (kv.first.first.rfind("Player_3", 0) == 0 && kv.second)
+			{
+				f[String((kv.first.first + "/" + kv.first.second).c_str())] = kv.second;
+			}
+		}
+		d["dbg_flags"] = f;
+		Dictionary cn;
+		for (const auto &kv : e.allCounters())
+		{
+			if (kv.first.first.rfind("Player_3", 0) == 0 && kv.second.value != 0)
+			{
+				cn[String((kv.first.second).c_str())] = kv.second.value;
+			}
+		}
+		d["dbg_counters"] = cn;
+		Array pr; // DBGAI : les prototypes de Player_3 (nom, condition, instances / max, membres)
+		for (const auto &proto : e.logic().players().teams().prototypes())
+		{
+			Player *p = proto->getControllingPlayer();
+			const std::string cond = proto->getDict().getAsciiString("teamProductionCondition");
+			if (!p || p->getPlayerName() != "Player_3" || cond.empty())
+			{
+				continue;
+			}
+			int members = 0;
+			for (Team *t : proto->teams())
+			{
+				members += (int)t->getMemberCount();
+			}
+			pr.push_back(String((proto->getName() + " | " + cond + "=" + (const_cast<ScriptEngine &>(e).evaluateProductionCondition(*p, cond) ? "1" : "0") + " | " +
+								 std::to_string(proto->teams().size()) + "/" + std::to_string(proto->getDict().getInt("teamMaxInstances")) +
+								 " m" + std::to_string(members) + " | " + proto->getDict().getAsciiString("teamUnitType1") + "," + proto->getDict().getAsciiString("teamUnitType2"))
+									.c_str()));
+		}
+		d["dbg_protos"] = pr;
+		Array sf; // DBGAI : évaluations / déclenchements des scripts surveillés
+		for (const auto &kv : g_dbgScriptFires)
+		{
+			sf.push_back(String((kv.first + " eval " + std::to_string(kv.second.first) + " fired " + std::to_string(kv.second.second)).c_str()));
+		}
+		d["dbg_fires"] = sf;
+		{
+			std::map<std::string, int> owned; // DBGAI : les structures de Player_3
+			for (::Object *o = e.logic().getFirstObject(); o; o = o->getNextObject())
+			{
+				if (o->getControllingPlayer() && o->getControllingPlayer()->getPlayerName() == "Player_3" && o->getTemplate() && o->isKindOf((unsigned)KindOfTokens::indexOf("STRUCTURE")))
+				{
+					++owned[o->getTemplate()->getName()];
+				}
+			}
+			std::string os;
+			for (const auto &kv : owned)
+			{
+				os += kv.first + "x" + std::to_string(kv.second) + " ";
+			}
+			d["dbg_owned"] = String(os.c_str());
+			std::string rs; // DBGAI : les références de Player_3
+			for (const auto &kv : e.dbgReferences())
+			{
+				if (kv.first.first.rfind("Player_3", 0) == 0)
+				{
+					const ::Object *o = e.logic().findObjectByID(kv.second);
+					rs += kv.first.second + "=" + (o && o->getTemplate() ? o->getTemplate()->getName() : std::string("?")) + " ";
+				}
+			}
+			d["dbg_refs"] = String(rs.c_str());
+		}
+		for (const auto &proto : e.logic().players().teams().prototypes())
+		{
+			if (Player *p = proto->getControllingPlayer(); p && p->getPlayerName() == "Player_3")
+			{
+				d["dbg_difficulty"] = String((std::to_string(p->getSkirmishDifficulty()) + " ai " + std::to_string(p->isSkirmishAI())).c_str());
+				break;
+			}
+		}
+	}
 	Array sides;
 	for (const ScriptEngine::RSide &side : e.sides())
 	{

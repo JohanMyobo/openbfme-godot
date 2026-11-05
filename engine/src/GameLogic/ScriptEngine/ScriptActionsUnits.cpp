@@ -43,6 +43,14 @@
 //     RW 0x7C62BF: every slot of the unit's command set holding a button of that name runs Object::doCommandButton (RW 0x696FD2) / doCommandButtonAtObject
 //     (RW 0x697890) with CMD_FROM_SCRIPT; TEAM_USE_COMMANDBUTTON_ABILITY (team, button) RW 0x7C11EE: the button by name for every member of the team's AI
 //     group (RW 0x76F9FF), whatever its command set. The ported command types: S-4841.
+//   * notre version (IA BFME1) : TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE (équipe, type) 393 -> RW 0x7C30F7 et
+//     TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE_OWNED_BY_PLAYER (équipe, type, joueurs) 394 -> RW 0x7C31FF : l'équipe (RW 0x759FDA), son centre (RW 0x7A0ECD :
+//     tous les membres, sommes SSE dans l'ordre, fois 1 / n) ; la liste de types du nom (RW 0x759158) : par type, l'objet le plus proche (RW 0x7C2F85),
+//     sinon le modèle du nom (RW 0x6D1305, absent : rien) et TheParitionManager (RW 0xA39090, FROM_CENTER_2D, dans 1e6) ; avec des joueurs, par joueur
+//     du paramètre (RW 0x75968D / 0x6A85EE) le sien, puis le plus proche à la longueur 3D (RW 0x403111 ; le premier trouvé, puis strictement plus
+//     proche) ; le groupe d'IA de l'équipe (RW 0x70042A / 0x7A3D3D) y marche (RW 0x774897, sans point de passage, CMD_FROM_SCRIPT).
+//     TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF (équipe, kindof) 391 -> RW 0x7C2CF5 et _OWNED_BY_PLAYER (équipe, kindof, joueurs) 392 -> RW 0x7C2E34 :
+//     de même, l'objet de chaque joueur (tous : le masque 0xFFFFF) venant de Player::findClosestByKindOf (RW 0x6ABC10).
 //
 // INFERENCE / NOT PORTED (stops): the AI states without a port (hunt, attitude, attack-team, the waypoint path states with their per-waypoint link
 // choice, face-object) -> S-1186 (docs/STOPS.md); the noted stand-ins below each report themselves.
@@ -58,6 +66,7 @@
 #include "Common/Thing/ThingFactory.h"
 #include "Common/Thing/ThingTemplate.h"
 #include "GameLogic/AI/AICommandSink.h"
+#include "GameLogic/AI/AIGroup.h"
 #include "GameLogic/AI/AIGroupFormations.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Map/TerrainLogic.h"
@@ -83,6 +92,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <set>
 
 namespace
@@ -196,6 +206,53 @@ std::vector<Coord3D> waypointChain(const TerrainLogic &terrain, const Waypoint *
 		w = w->linksTo.empty() ? nullptr : terrain.findWaypointById(w->linksTo.front());
 	}
 	return path;
+}
+
+// notre version : un paramètre KINDOF (27) : le bit du nom que porte la chaîne (ZH Parameter::readParameter le convertit au chargement,
+// KindOfMaskType::getSingleBitFromName), l'entier quand la chaîne est vide ; -1 pour un nom inconnu (aucun objet ne l'a)
+int kindOfParam(const ScriptParameter &p)
+{
+	return p.stringValue.empty() ? p.intValue : ObjectTemplateInfoBuilder::kindOfIndex(p.stringValue.c_str());
+}
+
+// notre version : RW 0x6ABC10 Player::findClosestByKindOf(pos, {bit}, KINDOFMASK_NONE) : Player::iterateObjects (RW 0x6ABABD : ses prototypes
+// (+ 0x34C), leurs équipes depuis la tête (+ 0x334, la plus récente), leurs membres) et le rappel RW 0x6AADB6 : un objet du bit (RW 0x70C4FE), sa
+// distance 2D au carré (RW 0x66137C, x87 large) strictement sous la meilleure (FLT_MAX au départ, RW 0xBD1910) le prend. INFERENCE : les
+// prototypes du joueur dans l'ordre de la fabrique
+Object *closestOfKindOf(GameLogic &logic, Player &player, const Coord3D &pos, int bit)
+{
+	Object *best = nullptr;
+	float bestDist = std::numeric_limits<float>::max();
+	if (bit < 0)
+	{
+		return nullptr;
+	}
+	for (const auto &proto : logic.players().teams().prototypes())
+	{
+		if (proto->getControllingPlayer() != &player)
+		{
+			continue;
+		}
+		for (auto it = proto->teams().rbegin(); it != proto->teams().rend(); ++it)
+		{
+			for (Object *o : ScriptConditions::members(**it))
+			{
+				if (!o->isKindOf((unsigned)bit))
+				{
+					continue;
+				}
+				const Coord3D *q = o->getPosition();
+				const double dx = SimMath::pc24SubW((double)q->x, (double)pos.x), dy = SimMath::pc24SubW((double)q->y, (double)pos.y);
+				const double d = SimMath::pc24AddW(SimMath::pc24MulW(dy, dy), SimMath::pc24MulW(dx, dx));
+				if ((double)bestDist > d)
+				{
+					best = o;
+					bestDist = (float)d; // fst dword
+				}
+			}
+		}
+	}
+	return best;
 }
 
 // lane SCRIPT-3: RW 0x7A3D3D, a team's AI group (TheAI's new group RW 0x70042A): every member (the team's list order) but one in a horde (RW 0x6939DF:
@@ -390,18 +447,23 @@ std::int32_t counterMath(std::int32_t lhs, int op, std::int32_t rhs, ScriptEngin
 // the transport (+ 0x22C) and its loading, the auto-transport (+ 0x234), the origin waypoint (+ 0x230: the units start at the waypoint here, so
 // no group move follows), a horde's own upgrade / level slots (RW 0x68C866 0xB4 / 0xB8,
 // 0x694BF8 0xC4: the object's own paths run)
-void createReinforcements(ScriptEngine &engine, const std::string &teamName, const std::string &waypointName)
+// notre version : RW 0x7C8657(team, unité, true) pour CREATE_REINFORCEMENT_TEAM_AT_UNIT_POSITION (RW 0x7CB391) : l'unité nommée (RW 0x75A243, absente :
+// rien) donne la position (+ 0x38) ; si son modèle est une STRUCTURE (+ 0x108 & 0x80), chaque recrue qui a une IA (+ 0x260) voit sa position ajustée
+// par adjustDestination (RW 0x6FE456, + 0x1CC, groupe nul) avant d'être placée ; RW 0x68B3AB qui suit ne touche que le drawable (+ 0xA4), côté client
+void createReinforcements(ScriptEngine &engine, const std::string &teamName, const std::string &placeName, bool atUnit)
 {
 	GameLogic &logic = engine.logic();
 	const TerrainLogic *terrain = logic.terrain();
-	const Waypoint *w = terrain ? terrain->findWaypointByName(waypointName) : nullptr;
+	const Waypoint *w = !atUnit && terrain ? terrain->findWaypointByName(placeName) : nullptr;
+	const Object *unit = atUnit ? engine.getUnitNamed(placeName) : nullptr;
 	const std::pair<std::string, std::string> q = engine.qualify(teamName);
 	TeamFactory &teams = logic.players().teams();
 	TeamPrototype *proto = teams.findTeamPrototype(q.first, q.second);
-	if (!w || !proto)
+	if (!(w || unit) || !proto)
 	{
 		return;
 	}
+	const bool adjust = unit && isKindOfName(*unit, "STRUCTURE");
 	if (!engine.host() || !logic.aiWorld())
 	{
 		engine.note("[S-1186] CREATE_REINFORCEMENT_TEAM: no object creation host / AI world");
@@ -413,7 +475,7 @@ void createReinforcements(ScriptEngine &engine, const std::string &teamName, con
 	{
 		engine.note("[S-1186] CREATE_REINFORCEMENT_TEAM: a team with a transport (the units start on the ground)");
 	}
-	const Coord3D spawn = w->location;
+	const Coord3D spawn = w ? w->location : *unit->getPosition();
 	float rowY = spawn.y;
 	for (int i = 1; i <= 7; ++i)
 	{
@@ -444,6 +506,13 @@ void createReinforcements(ScriptEngine &engine, const std::string &teamName, con
 			if (!obj)
 			{
 				continue;
+			}
+			AIUpdateInterface *ai = adjust ? obj->getAIUpdateInterface() : nullptr;
+			if (ai)
+			{
+				Coord3D adjusted = pos;
+				ai->world().pathfinder().adjustDestination(ai->adapter(), ai->locomotorInfo(), &adjusted, nullptr); // RW 0x6FE456
+				obj->setPosition(&adjusted);
 			}
 			obj->friend_onBuildComplete();
 			size_t at = 0;
@@ -478,6 +547,56 @@ void createReinforcements(ScriptEngine &engine, const std::string &teamName, con
 		rowY = SimMath::sseAdd(SimMath::sseMul(radius, 2.0f), rowY);
 	}
 	team->setActive(); // lane CAMP-1H: RW 0x7C8CFA .. 0x7C8D0E: the new team (made inactive, RW 0x7A6E8E) is activated after its units are placed
+}
+
+// the closest object to `centre` of the type or object list named `type` (owned by `owner` when not null; with `unnamedOnly`, outside the named cache):
+// a template through TheParitionManager (RW 0xA39090, FROM_CENTER_2D, within 1e6); an object list: the closest per type by 3D distance (RW 0x7C2F85).
+// `known` is false when the name is neither a list nor a template
+Object *closestOfType(ScriptEngine &engine, const Coord3D &centre, const std::string &type, const Player *owner, bool unnamedOnly, bool &known)
+{
+	GameLogic &logic = engine.logic();
+	const auto closestOf = [&](const ThingTemplate *tt) -> Object * {
+		auto owned = [owner](Object &o) { return !owner || o.getControllingPlayer() == owner; };
+		auto typed = [tt, unnamedOnly, &engine](Object &o) {
+			return ScriptConditions::equivalentTemplates(o.getTemplate(), tt) && !(unnamedOnly && engine.isInNamedCache(o));
+		};
+		PartitionFilterFn<decltype(owned)> fOwned(owned);
+		PartitionFilterFn<decltype(typed)> fTyped(typed);
+		return logic.partition().getClosestObject(centre, 1000000.0f, FROM_CENTER_2D, { &fOwned, &fTyped });
+	};
+	known = true;
+	Object *found = nullptr;
+	if (const std::vector<std::string> *list = engine.findObjectList(type))
+	{
+		float best = 3.4028235e38f;
+		for (const std::string &typeName : *list)
+		{
+			const ThingTemplate *tt = logic.things().findTemplate(typeName);
+			Object *c = tt ? closestOf(tt) : nullptr;
+			if (!c)
+			{
+				continue;
+			}
+			const float dx = SimMath::sseSub(centre.x, c->getPosition()->x);
+			const float dz = SimMath::sseSub(centre.z, c->getPosition()->z);
+			const float dy = SimMath::sseSub(centre.y, c->getPosition()->y);
+			const float d = SimMath::sseAdd(SimMath::sseAdd(SimMath::sseMul(dz, dz), SimMath::sseMul(dy, dy)), SimMath::sseMul(dx, dx));
+			if (d < best)
+			{
+				best = d;
+				found = c;
+			}
+		}
+	}
+	else if (const ThingTemplate *tt = logic.things().findTemplate(type))
+	{
+		found = closestOf(tt);
+	}
+	else
+	{
+		known = false;
+	}
+	return found;
 }
 
 } // namespace
@@ -967,7 +1086,12 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 	}
 	if (name == "CREATE_REINFORCEMENT_TEAM")
 	{
-		createReinforcements(engine, param(a, 0).stringValue, param(a, 1).stringValue);
+		createReinforcements(engine, param(a, 0).stringValue, param(a, 1).stringValue, false);
+		return true;
+	}
+	if (name == "CREATE_REINFORCEMENT_TEAM_AT_UNIT_POSITION") // RW 0x7CB391
+	{
+		createReinforcements(engine, param(a, 0).stringValue, param(a, 1).stringValue, true);
 		return true;
 	}
 	if (name == "NAMED_BUILD_STRUCTURE_AT_WAYPOINT")
@@ -1019,45 +1143,109 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 			centre.y = SimMath::sseMul(inv, centre.y);
 			centre.z = SimMath::sseMul(inv, centre.z);
 		}
-		const auto closestOf = [&](const ThingTemplate *tt) -> Object * {
-			auto owned = [p](Object &o) { return o.getControllingPlayer() == p; };
-			auto typed = [tt, unnamedOnly, &engine](Object &o) {
-				return ScriptConditions::equivalentTemplates(o.getTemplate(), tt) && !(unnamedOnly && engine.isInNamedCache(o));
-			};
-			PartitionFilterFn<decltype(owned)> fOwned(owned);
-			PartitionFilterFn<decltype(typed)> fTyped(typed);
-			return logic.partition().getClosestObject(centre, 1000000.0f, FROM_CENTER_2D, { &fOwned, &fTyped });
-		};
-		Object *found = nullptr;
-		if (const std::vector<std::string> *list = engine.findObjectList(param(a, 0).stringValue))
+		bool known = false;
+		Object *found = closestOfType(engine, centre, param(a, 0).stringValue, p, unnamedOnly, known);
+		if (found)
 		{
-			float best = 3.4028235e38f;
-			for (const std::string &typeName : *list)
+			engine.nameInCache(param(a, 3).stringValue, *found);
+		}
+		return true;
+	}
+	if (name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE" || name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE_OWNED_BY_PLAYER" ||
+		name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF" || name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF_OWNED_BY_PLAYER") // RW 0x7C30F7 / 0x7C31FF / 0x7C2CF5 / 0x7C2E34
+	{
+		Team *t = ScriptConditions::team(engine, param(a, 0).stringValue);
+		if (!t || !t->getFirstMember())
+		{
+			return true; // sans membre, le groupe est vide (RW 0x7A0ECD n'a pas de centre)
+		}
+		// RW 0x7A0ECD : tous les membres
+		float x = 0.0f, y = 0.0f, z = 0.0f;
+		int n = 0;
+		for (const Object *o = t->getFirstMember(); o; o = o->friend_teamNext())
+		{
+			x = SimMath::addf32(o->getPosition()->x, x);
+			y = SimMath::addf32(o->getPosition()->y, y);
+			z = SimMath::addf32(o->getPosition()->z, z);
+			++n;
+		}
+		const float f = SimMath::divf32(1.0f, SimMath::sseFromInt32(n));
+		const Coord3D centre{ SimMath::mulf32(f, x), SimMath::mulf32(f, y), SimMath::mulf32(f, z) };
+		bool known = false;
+		Object *best = nullptr;
+		if (name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_TYPE")
+		{
+			best = closestOfType(engine, centre, param(a, 1).stringValue, nullptr, false, known);
+		}
+		else if (name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF" || name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF_OWNED_BY_PLAYER")
+		{
+			// les joueurs du paramètre (RW 0x75968D), ou tous (le masque 0xFFFFF, RW 0x7C2D3F) ; le plus proche de chacun (RW 0x6ABC10), puis le plus
+			// proche à la longueur 3D comme pour le type
+			std::vector<Player *> players;
+			if (name == "TEAM_MOVE_TO_NEAREST_OBJECT_OF_KINDOF")
 			{
-				const ThingTemplate *tt = logic.things().findTemplate(typeName);
-				Object *c = tt ? closestOf(tt) : nullptr;
+				for (int i = 0; i < logic.players().getPlayerCount(); ++i)
+				{
+					if (Player *p = logic.players().getNthPlayer(i))
+					{
+						players.push_back(p);
+					}
+				}
+			}
+			else
+			{
+				players = ScriptConditions::players(engine, param(a, 2).stringValue);
+			}
+			const int bit = kindOfParam(param(a, 1));
+			float bestDist = 99999.0f; // RW 0xBDF350
+			for (Player *p : players)
+			{
+				Object *c = closestOfKindOf(logic, *p, centre, bit);
 				if (!c)
 				{
 					continue;
 				}
-				const float dx = SimMath::sseSub(centre.x, c->getPosition()->x);
-				const float dz = SimMath::sseSub(centre.z, c->getPosition()->z);
-				const float dy = SimMath::sseSub(centre.y, c->getPosition()->y);
-				const float d = SimMath::sseAdd(SimMath::sseAdd(SimMath::sseMul(dz, dz), SimMath::sseMul(dy, dy)), SimMath::sseMul(dx, dx));
-				if (d < best)
+				const float d = (float)SimMath::length3d(SimMath::sseSub(c->getPosition()->x, centre.x), SimMath::sseSub(c->getPosition()->y, centre.y),
+					SimMath::sseSub(c->getPosition()->z, centre.z));
+				if (!best || bestDist > d)
 				{
-					best = d;
-					found = c;
+					best = c;
+					bestDist = d;
 				}
 			}
 		}
-		else if (const ThingTemplate *tt = logic.things().findTemplate(param(a, 0).stringValue))
+		else
 		{
-			found = closestOf(tt);
+			float bestDist = 99999.0f; // RW 0xBDF350
+			for (Player *p : ScriptConditions::players(engine, param(a, 2).stringValue))
+			{
+				Object *c = closestOfType(engine, centre, param(a, 1).stringValue, p, false, known);
+				if (!known)
+				{
+					return true;
+				}
+				if (!c)
+				{
+					continue;
+				}
+				const float d = (float)SimMath::length3d(SimMath::sseSub(c->getPosition()->x, centre.x), SimMath::sseSub(c->getPosition()->y, centre.y),
+					SimMath::sseSub(c->getPosition()->z, centre.z));
+				if (!best || bestDist > d)
+				{
+					best = c;
+					bestDist = d;
+				}
+			}
 		}
-		if (found)
+		if (best)
 		{
-			engine.nameInCache(param(a, 3).stringValue, *found);
+			std::vector<ObjectID> ids;
+			for (Object *o : aiGroupOf(*t))
+			{
+				ids.push_back(o->getID());
+			}
+			AIGroup group(logic, ids);
+			group.groupMoveToPosition(*best->getPosition(), false, CMD_FROM_SCRIPT);
 		}
 		return true;
 	}
@@ -1220,6 +1408,84 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 				if (AIUpdateInterface *ai = o->getAIUpdateInterface())
 				{
 					ai->aiHunt(CMD_FROM_SCRIPT);
+				}
+			}
+		}
+		return true;
+	}
+	if (name == "TEAM_GUARD")
+	{
+		// notre version : RW 0x7C9367 (BFME2 decomp ScriptActions doTeamGuard shape): each member of the team (its list) that is no HORDE_MEMBER (0x26) nor
+		// UNDER_CONSTRUCTION (2) and has an AI (+ 0x260) guards its own position (AI command 0x1E RW 0x771790, GUARDMODE_NORMAL, CMD_FROM_SCRIPT)
+		static const int underConstruction = ObjectTemplateInfoBuilder::objectStatusIndex("UNDER_CONSTRUCTION");
+		static const int hordeMember = ObjectTemplateInfoBuilder::objectStatusIndex("HORDE_MEMBER");
+		if (Team *t = ScriptConditions::team(engine, param(a, 0).stringValue))
+		{
+			for (Object *o : ScriptConditions::members(*t))
+			{
+				if (o->testStatus((unsigned)hordeMember) || o->testStatus((unsigned)underConstruction))
+				{
+					continue;
+				}
+				if (AIUpdateInterface *ai = o->getAIUpdateInterface())
+				{
+					const Coord3D pos = *o->getPosition();
+					ai->aiGuardPosition(pos, 0, CMD_FROM_SCRIPT);
+				}
+			}
+		}
+		return true;
+	}
+	if (name == "TEAM_GUARD_FOR_FRAMECOUNT" || name == "TEAM_IDLE_FOR_FRAMECOUNT" || name == "TEAM_GUARD_FOR_SECONDS" || name == "TEAM_IDLE_FOR_SECONDS")
+	{
+		// notre version : the four share RW 0x7C1704(team, count, seconds) (actions 199 / 200: frames, 413 / 414: seconds; table RW 0x7CF857): the team's AI
+		// group (RW 0x70042A / 0x7A3D3D; its centre RW 0x76EDA7 is computed and unused) idles from the script (RW 0x771F49), then the team's sequential
+		// script waits (RW 0x60396C) count frames, or count x LOGICFRAMES_PER_SECOND (RW 0xD9F608). The BFME2 decomp's doTeamGuardForFramecount guards each
+		// member instead: RotWK idles
+		Team *t = ScriptConditions::team(engine, param(a, 0).stringValue);
+		if (!t)
+		{
+			return true;
+		}
+		for (Object *o : aiGroupOf(*t))
+		{
+			if (AIUpdateInterface *ai = o->getAIUpdateInterface())
+			{
+				ai->aiIdle(CMD_FROM_SCRIPT);
+			}
+		}
+		const int count = param(a, 1).intValue;
+		const bool seconds = name == "TEAM_GUARD_FOR_SECONDS" || name == "TEAM_IDLE_FOR_SECONDS";
+		engine.setSequentialTimer(*t, seconds ? count * LOGICFRAMES_PER_SECOND : count);
+		return true;
+	}
+	if (name == "TEAM_STAND_GROUND")
+	{
+		// notre version : RW 0x7C6C2B (BFME2 decomp ScriptActions_doStandGround.cpp doTeamStandGround, the same body): each member of the team gets
+		// STAND_GROUND (0x44) = the bool (RW 0x62684D); a member whose template is HORDE (+ 0x115 bit 0x20) gives it to every object its horde interface
+		// (RW 0x68C866) lists (slot 0x10C). INFERENCE: slot 0x10C's list is read as the contain's items list (slot 0x108's, RW 0x694569)
+		static const int standGround = ObjectTemplateInfoBuilder::objectStatusIndex("STAND_GROUND");
+		const bool on = param(a, 1).intValue != 0;
+		if (Team *t = ScriptConditions::team(engine, param(a, 0).stringValue))
+		{
+			for (Object *o : ScriptConditions::members(*t))
+			{
+				o->setStatus((unsigned)standGround, on);
+				if (!isKindOfName(*o, "HORDE"))
+				{
+					continue;
+				}
+				ContainModuleInterface *contain = o->getContain();
+				if (!contain || !contain->getHordeContainInterface())
+				{
+					continue;
+				}
+				if (const ContainModuleInterface::ContainedItemsList *items = contain->getContainedItemsList())
+				{
+					for (Object *m : *items)
+					{
+						m->setStatus((unsigned)standGround, on);
+					}
 				}
 			}
 		}

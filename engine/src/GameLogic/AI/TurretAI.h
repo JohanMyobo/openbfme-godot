@@ -125,7 +125,7 @@ public:
 	AIStateMachine &machine() { return *m_machine; }
 	unsigned currentStateId() const { return m_machine->currentStateId(); }
 	bool forceAttacking() const { return m_isForceAttacking; }
-	Team *victimInitialTeam() const { return m_victimInitialTeam; }
+	std::uint32_t victimInitialTeam() const { return m_victimInitialTeam; }
 	bool targetWasSetByIdleMood() const { return m_targetWasSetByIdleMood; }
 	bool positiveSweep() const { return m_positiveSweep; }
 	void setPositiveSweep(bool on) { m_positiveSweep = on; }
@@ -173,7 +173,7 @@ private:
 	float m_angle;                     // + 0x18
 	float m_pitch;                     // + 0x1C
 	UnsignedInt m_enableSweepUntil = 0;  // + 0x24
-	Team *m_victimInitialTeam = nullptr; // + 0x28
+	std::uint32_t m_victimInitialTeam = 0; // + 0x28 (notre version : l'id, l'équipe peut être supprimée : RW 0x7A676D)
 	int m_target = 0;                  // + 0x2C
 	UnsignedInt m_continuousFireExpirationFrame = 0xFFFFFFFFu; // + 0x30
 	UnsignedInt m_sleepUntil = 0;      // + 0x34

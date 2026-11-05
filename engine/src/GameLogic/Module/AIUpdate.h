@@ -178,6 +178,9 @@ public:
 	// lane PLAY-4: RW 0x662A21 (AIGuard.cpp): guard this spot in `mode` (GuardMode: the stances' 0 battle / 1 hold ground): the guard mode (+ 0x4C), the target
 	// type LOCATION unless AREA (+ 0x54), the location and angle (+ 0x58 / + 0x1A0), the machine to AI_GUARD (16)
 	void guardHere(int mode);
+	// notre version : AI command 0x1E (RW 0x771790, aiGuardPosition): the gate, then privateGuardPosition RW 0x6649C6 (AIGuard.cpp): a mobile unit that is
+	// no horde member nor projectile guards `pos` in `mode` (the location + 0x58, the mode + 0x4C, the machine cleared then AI_GUARD); false when nothing changed
+	bool aiGuardPosition(const Coord3D &pos, int mode, CommandSourceType source);
 	int guardMode() const { return m_guardMode; }                      // AI vslot 125
 	int guardTargetType() const { return m_guardTargetType; }          // AI vslot 123
 	const Coord3D &guardLocation() const { return m_guardLocation; }   // AI vslot 118

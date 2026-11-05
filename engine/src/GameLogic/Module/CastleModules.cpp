@@ -526,6 +526,35 @@ Object *CastleBehavior::preBuildNear(const ThingTemplate &tt, const Coord3D &pos
 	return bestId == INVALID_ID ? nullptr : buildOnPad(bestId, tt, false);
 }
 
+// RW 0x7996D3 : le parcours de preBuildNear sans distance ; le premier emplacement libre rend vrai
+bool CastleBehavior::hasFreePadFor(const ThingTemplate &tt) const
+{
+	if (state() != STATE_UNPACKED)
+	{
+		return false;
+	}
+	GameLogic &logic = getObject()->logic();
+	const std::vector<ObjectID> &list = templateKindOf(logic, tt, "FS_BASE_DEFENSE") && !m_defenseFoundations.empty() ? m_defenseFoundations : m_foundations;
+	for (ObjectID padId : list)
+	{
+		Object *pad = logic.findObjectByID(padId);
+		if (!pad || pad->isKindOf((unsigned)castleNames().wallUpgrade))
+		{
+			continue;
+		}
+		bool hasFoundation = false;
+		for (const std::unique_ptr<BehaviorModule> &m : pad->modules())
+		{
+			hasFoundation = hasFoundation || m->getFoundationAIUpdate();
+		}
+		if (hasFoundation && !occupantOf(*pad))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // RW 0x79A518
 Object *CastleBehavior::buildOnPad(ObjectID padId, const ThingTemplate &tt, bool instant)
 {

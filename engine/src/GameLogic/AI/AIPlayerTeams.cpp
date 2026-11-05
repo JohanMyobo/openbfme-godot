@@ -2,6 +2,7 @@
 // See GameLogic/AI/AIPlayerTeams.h.
 
 #include "GameLogic/AI/AIPlayerTeams.h"
+#include <cstdio>
 
 #include "Common/BuildAssistant.h"
 #include "Common/Dict.h"
@@ -268,6 +269,9 @@ void AIPlayerTeams::checkQueuedTeams(PlayerAI &ai, Player &p)
 					}
 				}
 				team->scriptState().beingBuilt = false;
+				// le destructeur de TeamInQueue (RW 0x8F4F8A, ZH ~TeamInQueue) active l'équipe (+ 0x5D / + 0x5E) : vide, TeamPrototype::updateState
+				// (RW 0x7A676D) la supprime ensuite
+				team->setActive();
 			}
 			endTeam(t, false);
 			ai.buildQueue.erase(ai.buildQueue.begin() + (std::ptrdiff_t)i);
@@ -396,6 +400,8 @@ bool AIPlayerTeams::startTraining(Player &p, WorkOrder &order)
 	ProductionUpdateInterface *pu = factory ? factory->getProductionUpdate() : nullptr;
 	if (!pu || pu->canQueueCreateUnit() != 0) // vslot 0x44
 	{
+		static int dbgN = 0; // DBGAI (sonde locale, non commitée)
+		if (dbgN++ < 60 && dbgN % 3 == 1) std::fprintf(stderr, "DBGTRAIN f%u %s %s factory=%s pu=%d can=%d\n", m_logic.getFrame(), p.getPlayerName().c_str(), order.thing->getName().c_str(), factory ? factory->getTemplate()->getName().c_str() : "-", pu ? 1 : 0, pu ? (int)pu->canQueueCreateUnit() : -9);
 		return false;
 	}
 	const ProductionID id = pu->requestUniqueUnitID(); // vslot 8

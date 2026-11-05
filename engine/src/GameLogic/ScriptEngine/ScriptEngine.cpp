@@ -763,6 +763,7 @@ bool ScriptEngine::shouldEvaluate(RScript &s) const
 	return s.frameToEvaluateAt <= m_logic.getFrame();
 }
 
+std::map<std::string, std::pair<int, int>> g_dbgScriptFires; // DBGAI (sonde locale, non commitée)
 // RW 0x60A15C (the condition team iteration RW 0x6099DC .. 0x609A99 is not ported: S-1183)
 void ScriptEngine::executeScript(RScript &s)
 {
@@ -771,6 +772,8 @@ void ScriptEngine::executeScript(RScript &s)
 		return;
 	}
 	++m_stats.scriptsEvaluated;
+	const bool dbgWatch = (s.def->name.find("Command Point") != std::string::npos || s.def->name.find("Raise Attack") != std::string::npos || s.def->name.find("Initialize Attack") != std::string::npos) && m_currentPlayer && m_currentPlayer->getPlayerName() == "Player_3"; // DBGAI
+	if (dbgWatch) ++g_dbgScriptFires[s.def->name].first; // DBGAI
 	if (s.def->delayEvaluationSeconds > 0)
 	{
 		s.frameToEvaluateAt = (UnsignedInt)(5 * s.def->delayEvaluationSeconds) + m_logic.getFrame(); // RW 0xD9F608 = 5
@@ -804,6 +807,7 @@ void ScriptEngine::executeScript(RScript &s)
 	if (evaluateConditions(*s.def))
 	{
 		++m_stats.scriptsFired;
+		if (dbgWatch) ++g_dbgScriptFires[s.def->name].second; // DBGAI
 		executeActions(s.def->actions, s);
 		if (s.def->isOneShot)
 		{
@@ -1004,6 +1008,18 @@ bool ScriptEngine::startSequentialScript(RScript &s)
 	r.loopCount = d.loopCount;
 	appendSequentialScript(r);
 	return true;
+}
+
+void ScriptEngine::setSequentialTimer(const Team &team, int frames)
+{
+	for (std::vector<SequentialScript> &chain : m_sequential)
+	{
+		if (!chain.empty() && chain.front().team == team.getID())
+		{
+			chain.front().framesToWait = frames;
+			return;
+		}
+	}
 }
 
 void ScriptEngine::appendSequentialScript(const SequentialScript &in)
@@ -1566,6 +1582,7 @@ void ScriptEngine::updateTeamStates()
 			{
 				updateTeamState(*t);
 			}
+			players.teams().deleteDeadTeams(*proto, players); // notre version : RW 0x7A67A5 .. 0x7A6809
 		}
 	}
 }

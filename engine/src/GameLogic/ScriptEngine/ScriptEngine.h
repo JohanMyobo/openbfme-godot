@@ -180,6 +180,7 @@ public:
 	// lane CAMP-1: every flag / counter by (side, name), for reports and the mission tests' progress logs
 	const std::map<std::pair<std::string, std::string>, bool> &allFlags() const { return m_flags; }
 	const std::map<std::pair<std::string, std::string>, Counter> &allCounters() const { return m_counters; }
+	const std::map<std::pair<std::string, std::string>, ObjectID> &dbgReferences() const { return m_references; } // DBGAI (non commité)
 	// the (side, name) key RW 0x72C43C gives a name with the current side as the default
 	std::pair<std::string, std::string> qualify(const std::string &name) const;
 
@@ -328,6 +329,8 @@ public:
 	void appendSequentialScript(const SequentialScript &r);
 	// RW 0x604C9F / 0x604CD9 (UNIT_ / TEAM_STOP_SEQUENTIAL_SCRIPT)
 	void removeSequentialScriptsOf(ObjectID object, std::uint32_t team);
+	// notre version : RW 0x60396C (ZH ScriptEngine::setSequentialTimer(Team*)): the first chain whose head runs for `team` waits `frames` (the head's + 0x20)
+	void setSequentialTimer(const Team &team, int frames);
 
 	// lane BACKLOG4 (S-529): the special powers triggered, RW ScriptEngine + 0x1A368: per player (20) a list of { CRC_String(the template's name) (RW
 	// 0x7ED86B), the caster's object id }. SpecialPowerModule::aboutToDoSpecialPower (RW 0x89713F) appends (RW 0x759986, the list's end); the conditions
