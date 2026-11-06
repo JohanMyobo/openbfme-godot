@@ -183,6 +183,7 @@ private:
 	};
 	std::vector<Attached> m_translators;
 	std::list<std::unique_ptr<ClientMessage>> m_messages;
+	bool m_propagating = false; ///< notre version : voir propagate()
 	std::vector<std::string> m_log;
 };
 

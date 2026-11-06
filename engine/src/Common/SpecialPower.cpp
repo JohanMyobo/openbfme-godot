@@ -63,7 +63,16 @@ void parseSpecialPowerEnum(INI *ini, void *instance, void *store, const void *us
 	INI::parseIndexList(ini, instance, store, ini->bfme1Data() ? bfme1SpecialPowerTypeNames() : userData);
 }
 
-const FieldParse kSpecialPowerFieldParse[] = {
+} // namespace
+
+// A friend of SpecialPowerTemplate: the INI rows are the only place outside the class that names its fields.
+struct SpecialPowerFieldRows
+{
+	static const FieldParse kMain[];
+	static const FieldParse kBfme1[];
+};
+
+const FieldParse SpecialPowerFieldRows::kMain[] = {
 	{ "Flags", INI::parseBitString32, kSpecialPowerFlagNames, SP_OFF(m_flags) },
 	{ "ReloadTime", INI::parseDurationUnsignedInt, nullptr, SP_OFF(m_reloadTime) },
 	{ "RequiredSciences", ScienceParse::parseScienceVector, nullptr, SP_OFF(m_requiredSciences) },
@@ -91,14 +100,16 @@ const FieldParse kSpecialPowerFieldParse[] = {
 	{ nullptr, nullptr, nullptr, 0 }
 };
 // community PR #36: BFME1's RequiredScience row (BFME1 data only)
-const FieldParse kBfme1SpecialPowerRows[] = {
+const FieldParse SpecialPowerFieldRows::kBfme1[] = {
 	{ "RequiredScience", ScienceParse::parseScienceVector, nullptr, SP_OFF(m_requiredSciences) },
 	{ nullptr, nullptr, nullptr, 0 },
 };
-const Bfme1FieldRowsRegistration kBfme1SpecialPowerRowsRegistration(kSpecialPowerFieldParse, kBfme1SpecialPowerRows);
+namespace
+{
+const Bfme1FieldRowsRegistration kBfme1SpecialPowerRowsRegistration(SpecialPowerFieldRows::kMain, SpecialPowerFieldRows::kBfme1);
+} // namespace
 
 #undef SP_OFF
-} // namespace
 
 SpecialPowerStore::~SpecialPowerStore()
 {
@@ -128,10 +139,9 @@ SpecialPowerTemplate *SpecialPowerStore::findMutable(const std::string &name)
 {
 	for (SpecialPowerTemplate *t : m_templates)
 	{
-		SpecialPowerTemplate *f = t->getFinalOverride();
-		if (f->m_name == name)
+		if (t->getName() == name) // the final override's name, RW 0x7B1D2C
 		{
-			return f;
+			return t; // the entry, RW 0x7B1D71
 		}
 	}
 	return nullptr;
@@ -146,9 +156,9 @@ const SpecialPowerTemplate *SpecialPowerStore::findSpecialPowerTemplateByID(unsi
 {
 	for (const SpecialPowerTemplate *t : m_templates)
 	{
-		if (t->m_id == id)
+		if (t->getID() == id) // the final override's id (lotrbfme 0x0EB6B2)
 		{
-			return t->getFinalOverride();
+			return t; // the entry (ZH; lotrbfme 0x0EB6EA)
 		}
 	}
 	return nullptr;
@@ -162,10 +172,11 @@ void SpecialPowerStore::parseSpecialPowerDefinition(INI *ini)
 	SpecialPowerTemplate *t = nullptr;
 	if (ini->getLoadType() == INI_LOAD_CREATE_OVERRIDES && existing)
 	{
+		SpecialPowerTemplate *last = existing->getFinalOverride(); // RW 0x7B2182
 		t = newTemplate();
-		*t = *existing; // RW 0x7B1E6C (name and id included)
+		*t = *last; // RW 0x7B1E6C (name and id included)
 		t->m_nextOverride = nullptr;
-		existing->m_nextOverride = t;
+		last->m_nextOverride = t; // RW 0x7B21CE
 		t->m_isOverride = true;
 	}
 	else
@@ -186,7 +197,7 @@ void SpecialPowerStore::parseSpecialPowerDefinition(INI *ini)
 		t->m_isOverride = ini->getLoadType() == INI_LOAD_CREATE_OVERRIDES;
 		m_templates.push_back(t);
 	}
-	ini->initFromINI(t, kSpecialPowerFieldParse);
+	ini->initFromINI(t, SpecialPowerFieldRows::kMain);
 }
 
 void SpecialPowerStore::parseSpecialPowerDefinitionGlobal(INI *ini)

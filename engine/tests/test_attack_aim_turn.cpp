@@ -54,3 +54,25 @@ TEST_CASE("attack aim: a residual angle inside half the locomotor's turn rate en
 	MESSAGE("turn rate " << turnRate << " rad/frame, residual " << residual << ", aim delta " << weapons->aimDelta() << ", first shot after " << firedAt << " frames");
 	CHECK(firedAt == 9); // the aim ends at once, then the PreAttackDelay and the arrow's flight
 }
+
+// notre version : le jeu d'armes ne garde du modèle que la clé de son nom ; l'arme vient de l'entrée courante du magasin (RW 0x6C9ADC .. 0x6C9AEC, BFME1 0x5EBBC0).
+// La surcharge d'une arme dans map.ini atteint donc les unités sans redéfinir leur WeaponSet : c'est ce qui ramène l'épée du Balrog de la Moria de 1800 à 150
+TEST_CASE("weapon set: a map.ini override of a weapon reaches the weapons of the units made after it")
+{
+	CombatWorld w;
+	const WeaponTemplate *root = TheWeaponStore->findWeaponTemplate("SwordWeapon");
+	REQUIRE(root != nullptr);
+	REQUIRE_FALSE(root->isOverride());
+	const std::string err = w.w.load("Weapon SwordWeapon\n  ClearNuggets\n  DamageNugget\n    Damage = 3\n    Radius = 0.0\n  End\nEnd\n", INI_LOAD_CREATE_OVERRIDES, "map.ini");
+	REQUIRE_MESSAGE(err.empty(), err);
+	const WeaponTemplate *over = TheWeaponStore->findWeaponTemplate("SwordWeapon");
+	REQUIRE(over != root);
+	REQUIRE(over->isOverride());
+	Object *sword = w.unit("Swordsman", 'A', 300.0f, 300.0f);
+	REQUIRE(sword != nullptr);
+	ObjectWeapons *weapons = sword->getWeapons();
+	REQUIRE(weapons != nullptr);
+	const Weapon *weapon = weapons->currentWeapon();
+	REQUIRE(weapon != nullptr);
+	CHECK(weapon->getTemplate() == over);
+}

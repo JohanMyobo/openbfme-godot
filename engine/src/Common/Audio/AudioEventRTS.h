@@ -235,3 +235,5 @@ int AudioWeightedChoice(int totalWeight, const WeightedSoundList &list, GameLogi
 // Every virtual file path an event can play (Sounds, Attack and Decay entries of an AudioEvent; the Filename of the other types), in list order,
 // with the folder of its sound type and the extension rule of RW 0x6DB4EA. Default / FAKE events and Multisounds have no files.
 std::vector<std::string> AudioEventFiles(const AudioSettings &settings, const AudioEventInfo &info);
+// notre version, BFME1 : le chemin localisé d'un fichier de l'événement (lotrbfme.exe 0x4B3730, voir AudioEventRTS::adjustForLocalization) ; sans '\\', le fichier tel quel
+std::string AudioEventLocalizedFile(const AudioSettings &settings, const AudioEventInfo &info, const std::string &file, const std::string &localizedPrefix);

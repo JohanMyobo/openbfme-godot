@@ -493,7 +493,7 @@ struct EffectProbe
 			}
 			else if (cls == "SpecialAbilityUpdate")
 			{
-				const int type = d->m_specialPowerTemplate ? d->m_specialPowerTemplate->m_type : 0;
+				const int type = d->m_specialPowerTemplate ? d->m_specialPowerTemplate->getSpecialPowerType() : 0;
 				if (type == 0x1D || type == 0x1A)
 				{
 					p.expects.push_back({ OWNER, cls + " (a capture)" });
@@ -1161,9 +1161,9 @@ void unitsOf(const std::string &faction, Results &res)
 					// the filters the target must pass: the SpecialPower's ObjectFilter (an object target) and a dominate's AttributeModifierAffects
 					// (Sharku's Tame the Beast: wargs)
 					std::vector<const ObjectFilter *> filters;
-					if (spt && spt->m_objectFilter && cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT))
+					if (spt && spt->getObjectFilter() && cb->hasOption(COMMAND_OPTION_NEED_TARGET_ENEMY_OBJECT | COMMAND_OPTION_NEED_TARGET_NEUTRAL_OBJECT))
 					{
-						filters.push_back(spt->m_objectFilter.get());
+						filters.push_back(spt->getObjectFilter().get());
 					}
 					Object *unit = spt ? g.logic().findObjectByID(uid) : nullptr;
 					for (size_t k = 0; unit && k < unit->modules().size(); ++k)

@@ -957,6 +957,7 @@ private:
 	Dictionary m_report;
 	bool m_autoAdvance = false;
 	bool m_terrainRenderDisabled = false; // notre version, BFME1 : ce que montre le terrain (GameLogic::terrainRenderDisabled)
+	Ref<ShaderMaterial> m_hiddenTerrainDecals; // son matériau tant qu'il est masqué (terrain_hidden_decals.gdshader)
 	bool m_paused = false;
 	bool m_animations = true;
 	bool m_houseColors = true;

@@ -154,7 +154,7 @@ Array GameWorld::get_object_powers(int64_t id) const
 		// lane HERO-1 part 2: the SpecialAbilityUpdate that drives it (RW 0x897E87), and whether it is cast at a target (a StartAbilityRange; the AutoHeal
 		// enums 0x80 / 0x8F are cast without one)
 		const SpecialAbilityUpdate *su = dynamic_cast<const SpecialAbilityUpdate *>(SpecialAbilityModules::findUpdate(*o, sp->getSpecialPowerTemplate()));
-		const int type = sp->getSpecialPowerTemplate()->m_type;
+		const int type = sp->getSpecialPowerTemplate()->getSpecialPowerType();
 		d["update"] = !su ? String() : dynamic_cast<const WeaponFireSpecialAbilityUpdate *>(su) ? String("WeaponFire") : dynamic_cast<const ToggleMountedSpecialAbilityUpdate *>(su) ? String("ToggleMounted")
 			: dynamic_cast<const HeroModeSpecialAbilityUpdate *>(su) ? String("HeroMode") : dynamic_cast<const LevelGrantSpecialPower *>(su) ? String("LevelGrant")
 			: dynamic_cast<const ModelConditionSpecialAbilityUpdate *>(su) ? String("ModelCondition") : String("SpecialAbility");

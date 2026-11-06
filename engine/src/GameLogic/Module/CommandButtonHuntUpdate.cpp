@@ -244,7 +244,7 @@ Object *CommandButtonHuntUpdate::scanClosestTarget()
 			// RW 0xA39090(its position, ViewObjectRange, distance type 1, [KindOf MINE (RW 0x444D39 / 0x445139), the hunter's player RW 0xC10E14])
 			const Player *mine = me->getControllingPlayer();
 			PartitionFilterFn ownMine([&](Object &o) { return kMine >= 0 && o.isKindOf((unsigned)kMine) && o.getControllingPlayer() == mine; });
-			if (logic.partition().getClosestObject(*other->getPosition(), final.m_viewObjectRange, FROM_CENTER_3D, { &ownMine }))
+			if (logic.partition().getClosestObject(*other->getPosition(), final.getViewObjectRange(), FROM_CENTER_3D, { &ownMine }))
 			{
 				continue;
 			}

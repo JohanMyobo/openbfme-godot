@@ -189,6 +189,18 @@ public:
 		return m_tracks[0].anim && !m_tracks[1].anim && !m_pending && (mode == 0 || mode == 1 || mode == 3 || mode == 5);
 	}
 
+	// notre version : RW 0x4BF560 (advance) tourne pour chaque modèle, le port le réserve à ceux qui ont du travail. Une piste MANUAL seule n'en a pas, mais
+	// un mélange en cours ou un état en attente si : sans cela une piste 0 MANUAL (le JUST_BUILT du Balrog, RORA à l'image 0, sous le sol) n'en sort jamais
+	bool needsAdvance() const
+	{
+		if (m_pending || m_tracks[1].anim || m_tracks[2].anim)
+		{
+			return true;
+		}
+		const W3DDrawTrack &t = m_tracks[0];
+		return t.anim && t.anim->Get_Num_Frames() > 1 && t.mode != W3D_ANIM_MODE_MANUAL;
+	}
+
 	W3DDrawFrame frame() const;
 	// lane PERF-1: the same frame written into `f`, reusing its strings' and vector's storage (the render side asks for every animated drawable's frame
 	// in every render frame)

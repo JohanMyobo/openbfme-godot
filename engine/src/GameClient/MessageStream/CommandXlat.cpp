@@ -1025,7 +1025,7 @@ MessageDisposition CommandTranslator::translate(const ClientMessage &msg)
 			// is a left click with the default (alternate) mouse
 			const CommandButton *pending = m_ctx.ui.getGUICommand();
 			// FAITS CIBLE BFME1 (lotrbfme.exe) : avec la souris alternée, le clic droit (0x9B0690) passe par evaluateContextCommand quelle que soit la commande en attente, et
-			// le clic gauche (0x9B0805) ne fait rien ; RotWK réserve au contraire la cible au clic gauche (ci-dessus)
+			// le clic gauche (0x9B0805) ne fait rien ici : GUICommandTranslator a déjà annulé la commande (0x5B1C70) ; RotWK réserve au contraire la cible au clic gauche (ci-dessus)
 			const bool guiTarget = pending && pending->m_command != GUI_COMMAND_ATTACK_MOVE && !rightClickCarriesTarget();
 			if (left ? (m_alternateMouse && !guiTarget) : (!m_alternateMouse || guiTarget))
 			{
@@ -1241,7 +1241,7 @@ bool CommandTranslator::canCaptureBuilding(const Object &capturer, const Object 
 	{
 		return false;
 	}
-	if (module->getSpecialPowerTemplate()->m_objectFilter)
+	if (module->getSpecialPowerTemplate()->getObjectFilter())
 	{
 		++m_unportedMeta["capture with a power ObjectFilter (S-2002)"];
 		return false;

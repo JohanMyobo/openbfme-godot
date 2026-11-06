@@ -765,7 +765,7 @@ void castUpdateAbilities(Shared &sh, Game &g, const JsonValue *fj, Object *&hero
 	for (SpecialPowerModule *sp : powers)
 	{
 		const std::string pname = sp->getSpecialPowerTemplate()->getName();
-		if (sp->getSpecialPowerTemplate()->m_type == 0x87)
+		if (sp->getSpecialPowerTemplate()->getSpecialPowerType() == 0x87)
 		{
 			run.abilitiesOther.push_back(pname + "(fake leadership button)"); // SPECIAL_FAKE_LEADERSHIP_BUTTON: a NONPRESSABLE display button, the leadership is an aura
 			continue;
@@ -813,7 +813,7 @@ void castUpdateAbilities(Shared &sh, Game &g, const JsonValue *fj, Object *&hero
 			away = 120.0f; // the speech's first ring is (WaveWidth, 2 * WaveWidth]: the update widens the wave before its first trigger (RW 0x8B06F4)
 		}
 		// lane HERO-2: a Screech (SPECIAL_SCREECH, the BeScary script event) terrifies the enemy's soldiers: its target is the enemy faction's first horde member unit
-		const int ptype0 = sp->getSpecialPowerTemplate()->m_type;
+		const int ptype0 = sp->getSpecialPowerTemplate()->getSpecialPowerType();
 		const ThingTemplate *enemyUnit = nullptr;
 		if (const JsonValue *ej = sh.census.get(g.enemy->getPlayerTemplate()->getName()))
 		{
@@ -924,7 +924,7 @@ void castUpdateAbilities(Shared &sh, Game &g, const JsonValue *fj, Object *&hero
 		const unsigned triggered0 = su->abilitiesTriggered();
 		const AutoHealBehavior *heal = dynamic_cast<const AutoHealBehavior *>(hero->findModule("AutoHealBehavior"));
 		const unsigned heals0 = heal ? heal->heals() : 0;
-		const int ptype = sp->getSpecialPowerTemplate()->m_type;
+		const int ptype = sp->getSpecialPowerTemplate()->getSpecialPowerType();
 		const ToggleMountedSpecialAbilityUpdateModuleData *tmd = dynamic_cast<const ToggleMountedSpecialAbilityUpdateModuleData *>(su->abilityData());
 		if (tmd && !tmd->m_mountedTemplate.empty())
 		{
@@ -1173,7 +1173,7 @@ void castUpdateAbilities(Shared &sh, Game &g, const JsonValue *fj, Object *&hero
 			{
 				effect = "modifier " + tam;
 			}
-			else if ((sp->getSpecialPowerTemplate()->m_type == 0x80 || sp->getSpecialPowerTemplate()->m_type == 0x8F) && heal && heal->heals() > heals0 && heroBody && heroBody->getHealth() > heroHealth0)
+			else if ((sp->getSpecialPowerTemplate()->getSpecialPowerType() == 0x80 || sp->getSpecialPowerTemplate()->getSpecialPowerType() == 0x8F) && heal && heal->heals() > heals0 && heroBody && heroBody->getHealth() > heroHealth0)
 			{
 				effect = "heal";
 			}
@@ -1245,7 +1245,7 @@ void castOtherPowers(Shared &sh, Game &g, const JsonValue *fj, Object *hero, Her
 			run.abilitiesOther.push_back(pname + "(passive button)");
 			continue;
 		}
-		if (sp->getSpecialPowerTemplate()->m_type == 0x87)
+		if (sp->getSpecialPowerTemplate()->getSpecialPowerType() == 0x87)
 		{
 			run.abilitiesOther.push_back(pname + "(fake leadership button)");
 			continue;

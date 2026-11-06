@@ -783,7 +783,40 @@ std::vector<Object *> ObjectCreationList::createCore(GameLogic &logic, const OCL
 		{
 			if (AIWorld *ai = logic.aiWorld()) ai->addObjectToPathfindMap(*o);
 		}
-		// RW 0x5F1678 .. 0x5F17B7: FadeIn / FadeOut (the FadeSound and the drawable fade), the drawable refresh: client
+		// notre version, RW 0x5F1678 .. 0x5F17B7 (BFME1 : ObjectCreationList.cpp, m_fadeIn / m_fadeOut) : le fondu du drawable sur FadeTime, sans effet sur la simulation.
+		// Une horde (template + 0x108, bit 109, RW 0x5F16C4) n'a pas de corps à elle : chacun de ses membres fait le fondu d'entrée. FadeSound n'est pas porté : aucune donnée de BFME1 ne s'en sert
+		if (n.fadeIn || n.fadeOut)
+		{
+			if (!n.fadeSound.empty())
+			{
+				unported(logic, m_unportedUses, "FadeSound (RW 0x5F1685, RW 0x5F1751)");
+			}
+			if (ObjectClientHooks *client = logic.clientHooks())
+			{
+				if (n.fadeIn)
+				{
+					if (o->isKindOf((unsigned)CombatNames::kinds().horde))
+					{
+						ContainModuleInterface *contain = o->getContain();
+						if (const ContainModuleInterface::ContainedItemsList *members = contain ? contain->getContainedItemsList() : nullptr)
+						{
+							for (Object *member : *members)
+							{
+								client->fadeIn(*member, n.fadeTime);
+							}
+						}
+					}
+					else
+					{
+						client->fadeIn(*o, n.fadeTime);
+					}
+				}
+				if (n.fadeOut)
+				{
+					client->fadeOut(*o, n.fadeTime);
+				}
+			}
+		}
 	}
 	return made;
 }

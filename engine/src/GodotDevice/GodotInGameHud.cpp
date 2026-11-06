@@ -583,6 +583,9 @@ bool HudDevice::makeGlobeLayer(GlobeLayer &layer, const char *name, const Color 
 		drawErrors.push_back(std::string("palantir globe: the W3D model palantir did not load or has no ") + hidden);
 		return false;
 	}
+	// notre version : le globe a sa propre scène, comme l'Apt View3D (lane INGAMEBG-1) : ni le brouillard de la carte (w3d_shroud_on, BFME1) ni son brouillard matériel.
+	// INFERENCE : le constructeur de scène RW 0x5424E0 vaut aussi pour cette scène
+	layer.inst->set_instance_scene_fog(instance, false);
 	return true;
 }
 
@@ -982,7 +985,7 @@ void HudDevice::drawPlaceholder(const AptCanvasOp &op, RID item)
 	}
 	if (op.symbolName == "TimerOverlay")
 	{
-		const float t = hud->palantir() ? hud->palantir()->timerFor(varOf(op, "_timerId")) : -1.0f;
+		const float t = hud->palantir() ? hud->palantir()->timerForClip(op.path, varOf(op, "_timerId")) : -1.0f;
 		if (t < 0.0f || t >= 1.0f)
 		{
 			return;

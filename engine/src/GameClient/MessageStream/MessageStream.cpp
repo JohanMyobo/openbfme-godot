@@ -115,6 +115,14 @@ std::vector<ClientMessage> MessageStream::propagate()
 	// Each raw event goes through the complete translator pipeline (with the messages the translators derive from it) before the next event is
 	// translated: a later event's translators read the state (selection, mode) that the earlier event's translation changed, so a batch gives the
 	// same messages as the same events drained one by one (review HUD-1 r1 #1). Simulation dispatch stays at the logic frame (HudInput::update).
+	// notre version : un crochet de traducteur peut envoyer un message puis demander une passe (le clic droit de BFME1 qui lance un pouvoir du grimoire,
+	// InGameHud::castSpellAt -> send -> HudInput::flush). Une passe imbriquée viderait la liste que la passe en cours parcourt (plantage) : le message reste dans
+	// cette liste, les traducteurs suivants le voient et il sort à la fin de la passe en cours, comme tout message ajouté par un traducteur (ZH propagateMessages)
+	if (m_propagating)
+	{
+		return {};
+	}
+	m_propagating = true;
 	std::list<std::unique_ptr<ClientMessage>> events;
 	events.swap(m_messages);
 	std::vector<ClientMessage> out;
@@ -145,6 +153,7 @@ std::vector<ClientMessage> MessageStream::propagate()
 		}
 		m_messages.clear();
 	}
+	m_propagating = false;
 	return out;
 }
 

@@ -84,6 +84,9 @@ enum ConditionType
 	TEAM_STATE_IS = 11,
 	TEAM_STATE_IS_NOT = 12,
 	TEAM_INSIDE_AREA_ENTIRELY = 17,
+	TEAM_OUTSIDE_AREA_ENTIRELY = 18, // notre version, BFME1
+	UNIT_COMPARE_RANK = 144,         // notre version, BFME1
+	NAMED_RANK_LEVEL = 172,          // notre version, BFME1
 	UNIT_HEALTH = 53,
 	UNIT_HAS_OBJECT_STATUS = 80,
 	TEAM_ALL_HAS_OBJECT_STATUS = 81,
@@ -870,6 +873,55 @@ bool ScriptConditions::pointInTrigger(const TriggerArea &t, float px, float py)
 
 // ---- RW 0x7EB7CD --------------------------------------------------------------------------------------------------------------------------------
 
+// RW 0x7E6A5A: RW 0x7A0E21 (counted members both inside and outside) || RW 0x7A0CDC (units, and every counted one inside)
+static bool teamInsideAreaPartially(ScriptEngine &engine, const ScriptCondition &c)
+{
+	const Team *tm = ScriptConditions::team(engine, param(c, 0).stringValue);
+	const TriggerArea *area = engine.findTrigger(param(c, 1).stringValue);
+	if (!tm || !area)
+	{
+		return false;
+	}
+	const int trig = engine.triggerIndex(area);
+	const int surfaces = param(c, 2).intValue;
+	bool any = false, in = false, out = false;
+	for (const Object *o : ScriptConditions::members(*tm))
+	{
+		if (countedOnSurfaces(*o, surfaces))
+		{
+			any = true;
+			(insideTracked(*o, trig) ? in : out) = true;
+		}
+	}
+	if (any && in && out)
+	{
+		return true;
+	}
+	return ScriptConditions::teamHasAnyUnits(*tm) && any && !out;
+}
+
+// RW 0x7E72C7 -> RW 0x7A0CDC (units, and every counted member inside)
+static bool teamInsideAreaEntirely(ScriptEngine &engine, const ScriptCondition &c)
+{
+	const Team *tm = ScriptConditions::team(engine, param(c, 0).stringValue);
+	const TriggerArea *area = engine.findTrigger(param(c, 1).stringValue);
+	if (!tm || !area || !ScriptConditions::teamHasAnyUnits(*tm))
+	{
+		return false;
+	}
+	const int trig = engine.triggerIndex(area);
+	bool any = false, out = false;
+	for (const Object *o : ScriptConditions::members(*tm))
+	{
+		if (countedOnSurfaces(*o, param(c, 2).intValue))
+		{
+			any = true;
+			out = out || !insideTracked(*o, trig);
+		}
+	}
+	return any && !out;
+}
+
 bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 {
 	const ScriptTemplate *t = ScriptTemplates::condition(c.resolved);
@@ -915,7 +967,7 @@ bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 		return false;
 	}
 	case NAMED_INSIDE_AREA: // RW 0x7E6ADC: the position truncated to integers (cvttss2si), then pointInTrigger
-	case NAMED_OUTSIDE_AREA:
+	case NAMED_OUTSIDE_AREA: // RW 0x7E72B2, lotrbfme 0x324AA0 (evaluateNamedOutsideArea), ZH ScriptConditions.cpp : !NAMED_INSIDE_AREA, donc vrai pour une unité disparue
 	{
 		const Object *o = engine.getUnitNamed(param(c, 0).stringValue);
 		const TriggerArea *area = engine.findTrigger(param(c, 1).stringValue);
@@ -923,13 +975,13 @@ bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 		{
 			engine.note("***WARNING: Trigger area '" + param(c, 1).stringValue + "' not found***");
 		}
-		if (!o || !area)
+		bool in = false;
+		if (o && area)
 		{
-			return false;
+			const Coord3D *pos = o->getPosition();
+			in = pointInTrigger(*area, SimMath::sseFromInt32(SimMath::cvttss2si(pos->x)), SimMath::sseFromInt32(SimMath::cvttss2si(pos->y)));
 		}
-		const Coord3D *pos = o->getPosition();
-		const bool in = pointInTrigger(*area, SimMath::sseFromInt32(SimMath::cvttss2si(pos->x)), SimMath::sseFromInt32(SimMath::cvttss2si(pos->y)));
-		return c.resolved == NAMED_OUTSIDE_AREA ? !in : in; // RW 0x7E72B2: !NAMED_INSIDE_AREA
+		return c.resolved == NAMED_OUTSIDE_AREA ? !in : in;
 	}
 	case TEAM_DESTROYED: // RW 0x7E69C6: the team exists, it was created (+ 0x128) and has no object left (RW 0x7A0956)
 	{
@@ -962,50 +1014,22 @@ bool ScriptConditions::evaluate(ScriptEngine &engine, const ScriptCondition &c)
 		return false;
 	}
 	case TEAM_INSIDE_AREA_PARTIALLY: // RW 0x7E6A5A: RW 0x7A0E21 (counted members both inside and outside) || RW 0x7A0CDC (units, and every counted one inside)
+		return teamInsideAreaPartially(engine, c);
+	case TEAM_OUTSIDE_AREA_ENTIRELY: // notre version, BFME1 : lotrbfme 0x324BD0 (evaluateTeamOutsideAreaEntirely), ZH ScriptConditions.cpp : ni entièrement, ni partiellement dedans, donc vrai pour une équipe détruite
+		return !(teamInsideAreaEntirely(engine, c) || teamInsideAreaPartially(engine, c));
+	case UNIT_COMPARE_RANK: // notre version, BFME1. INFÉRENCE (S-5017) : le rang de l'unité nommée, comparé
+	case NAMED_RANK_LEVEL:  // notre version, BFME1. INFÉRENCE (S-5017) : le rang de l'unité nommée, égal au niveau
 	{
-		const Team *tm = team(engine, param(c, 0).stringValue);
-		const TriggerArea *area = engine.findTrigger(param(c, 1).stringValue);
-		if (!tm || !area)
+		const Object *o = engine.getUnitNamed(param(c, 0).stringValue);
+		const ExperienceTracker *xp = o ? o->getExperienceTracker() : nullptr;
+		if (!xp)
 		{
 			return false;
 		}
-		const int trig = engine.triggerIndex(area);
-		const int surfaces = param(c, 2).intValue;
-		bool any = false, in = false, out = false;
-		for (const Object *o : members(*tm))
-		{
-			if (countedOnSurfaces(*o, surfaces))
-			{
-				any = true;
-				(insideTracked(*o, trig) ? in : out) = true;
-			}
-		}
-		if (any && in && out)
-		{
-			return true;
-		}
-		return teamHasAnyUnits(*tm) && any && !out;
+		return c.resolved == NAMED_RANK_LEVEL ? xp->getRank() == param(c, 1).intValue : compare(param(c, 1).intValue, xp->getRank(), param(c, 2).intValue);
 	}
 	case TEAM_INSIDE_AREA_ENTIRELY: // RW 0x7E72C7 -> RW 0x7A0CDC (units, and every counted member inside)
-	{
-		const Team *tm = team(engine, param(c, 0).stringValue);
-		const TriggerArea *area = engine.findTrigger(param(c, 1).stringValue);
-		if (!tm || !area || !teamHasAnyUnits(*tm))
-		{
-			return false;
-		}
-		const int trig = engine.triggerIndex(area);
-		bool any = false, out = false;
-		for (const Object *o : members(*tm))
-		{
-			if (countedOnSurfaces(*o, param(c, 2).intValue))
-			{
-				any = true;
-				out = out || !insideTracked(*o, trig);
-			}
-		}
-		return any && !out;
-	}
+		return teamInsideAreaEntirely(engine, c);
 	case TEAM_STATE_IS:     // RW 0x7EA28F: team + 0x44 == the state
 	case TEAM_STATE_IS_NOT: // RW 0x7EA303
 	{

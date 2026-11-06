@@ -23,6 +23,9 @@ const MenuText := preload("res://scripts/menu_text.gd") # lane MENUFIX-1 / MENUF
 
 var playing := ""          # the title on screen ("" none)
 var skipped := false
+## notre version : les clics et touches restés en file pendant le chargement arrivent à la première image : ils ne sautent pas le film
+const STALE_INPUT_MS := 300
+var _input_from_ms := 0
 var errors: Array = []     # lane CAMP-2: "<title>: <error>" of every movie that could not be played
 var last: Dictionary = {}  # lane CAMP-2: the last movie's playback (title, frames, frames_decoded, duration_ms, elapsed_ms, luma_first, luma_last, skipped)
 var _layer: CanvasLayer
@@ -72,6 +75,7 @@ func play(world: Node, audio: Node, title: String) -> bool:
 	# the movie runs on the wall clock; under Godot's Movie Maker (--write-movie: simulated time) on the frames' deltas
 	var simulated := not Engine.get_write_movie_path().is_empty()
 	var started := Time.get_ticks_msec()
+	_input_from_ms = started + STALE_INPUT_MS
 	var waited := 0.0
 	var fps: float = opened.fps
 	var frames: int = opened.frames
@@ -208,6 +212,8 @@ func _size_error(label: Label) -> void:
 
 func _input(event: InputEvent) -> void:
 	if playing.is_empty() and _layer == null:
+		return
+	if Time.get_ticks_msec() < _input_from_ms:
 		return
 	var skip := false
 	if event is InputEventKey and event.pressed and not event.echo:

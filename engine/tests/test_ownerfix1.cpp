@@ -3,6 +3,7 @@
 
 #include "doctest.h"
 #include "CampaignTestUtil.h"
+#include "ScriptTestUtil.h"
 #include "HudTestUtil.h"
 
 #include "Common/PlayerScience.h"
@@ -13,6 +14,8 @@
 #include "GameClient/SpellBookUI.h"
 #include "GameLogic/FXEvents.h"
 #include "GameLogic/Map/TerrainLogic.h"
+#include "GameLogic/ScriptEngine/ScriptActions.h"
+#include "GameLogic/ScriptEngine/ScriptEngine.h"
 #include "GameLogic/SimMath.h"
 #include "GameLogic/Module/SpecialPowerModules.h"
 
@@ -210,6 +213,34 @@ TEST_CASE("ownerfix1 campaign powers: MAP ANG Angmar has a spell book, the campa
 			CHECK_FALSE(b.ready); // recharging after the cast
 		}
 	}
+}
+
+// notre version : FIRE_SPECIAL_POWER_ON_TEAM (BFME1 0x6F8340) : le centre de l'équipe (0x4EDCD0), le premier module du pouvoir chez les membres du joueur (0x6F48B0), sans
+// test de science ni de recharge. La Moria de BFME1 invoque ainsi son Balrog, depuis le grimoire de Mordor, sur le marqueur « Balrog Spawn » ; ici Chill Wind d'Angmar
+TEST_CASE("ownerfix1 FIRE_SPECIAL_POWER_ON_TEAM: the player's spell book casts at the centre of the named team")
+{
+	OPENBFME_REQUIRE_START(s);
+	Mission m;
+	m.load(*s);
+	Player *p = m.logic().players().getLocalPlayer();
+	REQUIRE(p != nullptr);
+	Object *wk = m.unit("Witch King");
+	REQUIRE(wk != nullptr);
+	REQUIRE(wk->getTeam() != nullptr);
+	const std::string playerName = p->getPlayerName();
+	const std::string teamName = playerName + "/" + wk->getTeam()->getName();
+	const auto action = [](const std::string &player, const std::string &power, const std::string &team) {
+		return scripttest::act("FIRE_SPECIAL_POWER_ON_TEAM", { scripttest::sp(11, player), scripttest::sp(31, power), scripttest::sp(3, team) });
+	};
+	const int before = countTemplate(m.logic(), "SpellBookChillWind");
+	// une équipe ou un pouvoir inconnus : rien (0x6F8366, 0x6F8390)
+	ScriptActions::execute(m.logic().scriptEngine(), action(playerName, "SpellBookChillWind", "NoSuchTeam"));
+	ScriptActions::execute(m.logic().scriptEngine(), action(playerName, "NoSuchPower", teamName));
+	m.step(2);
+	CHECK(countTemplate(m.logic(), "SpellBookChillWind") == before);
+	ScriptActions::execute(m.logic().scriptEngine(), action(playerName, "SpellBookChillWind", teamName));
+	m.step(2);
+	CHECK(countTemplate(m.logic(), "SpellBookChillWind") == before + 1);
 }
 
 // PLAYER_SET_MAX_SPELLPOINTS's rank search (RW 0x782942) against Rank.ini's grants (rank 1: 5, every other rank: 1), independent sums: 5 -> rank 1,

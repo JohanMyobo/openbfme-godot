@@ -652,7 +652,7 @@ UpdateSleepTime SpecialAbilityUpdate::calcSleep()
 void SpecialAbilityUpdate::releaseCapture()
 {
 	const SpecialPowerTemplate *spt = m_data->m_specialPowerTemplate; // RW 0x688D3C(module data + 0x38), the template's type at + 0x1C
-	if (!spt || spt->m_type != 0x1D)
+	if (!spt || spt->getSpecialPowerType() != 0x1D)
 	{
 		return;
 	}
@@ -699,7 +699,7 @@ bool SpecialAbilityUpdate::persistentTrigger() const
 	{
 		return false;
 	}
-	if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->m_type == 0x27)
+	if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->getSpecialPowerType() == 0x27)
 	{
 		static const int kShrubbery = ObjectTemplateInfoBuilder::kindOfIndex("SHRUBBERY");
 		const Object *t = target();
@@ -764,13 +764,13 @@ bool SpecialAbilityUpdate::withinStartAbilityRange()
 	{
 		if (isZero(m_targetPos))
 		{
-			return m_data->m_specialPowerTemplate == nullptr || m_data->m_specialPowerTemplate->m_type != 0x88; // RW 0x852170
+			return m_data->m_specialPowerTemplate == nullptr || m_data->m_specialPowerTemplate->getSpecialPowerType() != 0x88; // RW 0x852170
 		}
 		// RW 0x6CA525: max(0, dist2D - own radius)^2 (the enum 0x5B / 0x38 branches use the AI's distance: S-860)
 		dist2 = CircleDistanceSquaredToPoint(*obj->getPosition(), CombatQueries::boundingCircleRadius(*obj), m_targetPos);
 		// lane STARTRANGE-1: RW 0x85221D .. 0x852233: SPECIAL_GRAB_PASSENGER (0x27) takes 400.0 (RW 0xC55874) off the squared distance (subss) whichever
 		// distance was taken. BFME2 1.06: the same rule (decomp SpecialAbilityUpdateIsWithinStartAbilityRange.cpp, retail 0x44F28E)
-		if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->m_type == 0x27)
+		if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->getSpecialPowerType() == 0x27)
 		{
 			dist2 = SimMath::sseSub(dist2, 400.0f);
 		}
@@ -869,7 +869,7 @@ UpdateSleepTime SpecialAbilityUpdate::update()
 	const Object *t = m_targetID != INVALID_ID ? target() : nullptr;
 	// RW 0x854FB8 .. 0x855005 (the capture enums, lane HERO-2): a target of the object's team is captured: done; a dead one too unless it is a CAPTURABLE
 	// in POST_COLLAPSE (ruins stay capturable); the other abilities end at a dead target. INFERENCE (S-1225): a target that is gone ends it too (HERO-1)
-	const int updType = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->m_type : 0;
+	const int updType = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->getSpecialPowerType() : 0;
 	bool targetDone = m_targetID != INVALID_ID && !t;
 	if (t)
 	{
@@ -1008,7 +1008,7 @@ UpdateSleepTime SpecialAbilityUpdate::update()
 bool SpecialAbilityUpdate::payUnitCost()
 {
 	const SpecialPowerTemplate *power = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->getFinalOverride() : nullptr; // RW 0x688D3C
-	if (!power || power->m_unitCost == 0)
+	if (!power || power->getUnitCost() == 0)
 	{
 		return true;
 	}
@@ -1019,7 +1019,7 @@ bool SpecialAbilityUpdate::payUnitCost()
 	{
 		return true;
 	}
-	if (horde->payloadCount() < (unsigned)power->m_unitCost) // RW 0x855273 .. 0x85527B
+	if (horde->payloadCount() < (unsigned)power->getUnitCost()) // RW 0x855273 .. 0x85527B
 	{
 		return false;
 	}
@@ -1030,7 +1030,7 @@ bool SpecialAbilityUpdate::payUnitCost()
 	static const int kBurningDeath = CombatNames::modelCondition("BURNINGDEATH");                                        // 544
 	GameLogic &logic = obj->logic();
 	const ObjectID banner = horde->bannerCarrier(); // RW 0x855298: slot 0x118, read once
-	for (int n = power->m_unitCost; n != 0; --n)
+	for (int n = power->getUnitCost(); n != 0; --n)
 	{
 		Object *member = horde->firstMemberNotKindOf(kBanner); // RW 0x8552B4
 		if (!member || (banner != INVALID_ID && member == logic.findObjectByID(banner)))
@@ -1043,7 +1043,7 @@ bool SpecialAbilityUpdate::payUnitCost()
 		{
 			member->setModelConditionState(kBurningDeath, true); // RW 0x8552E3 .. 0x8552EC
 		}
-		member->kill(DAMAGE_UNRESISTABLE, power->m_unitCostDeathType); // RW 0x855302
+		member->kill(DAMAGE_UNRESISTABLE, power->getUnitCostDeathType()); // RW 0x855302
 		member->setStatus(kUnselectable, true);   // RW 0x85530D
 		member->setStatus(kIgnoreParalyze, true); // RW 0x855318
 	}
@@ -1084,7 +1084,7 @@ void SpecialAbilityUpdate::approachTarget()
 		// RW 0x853B9E .. 0x853BC6 (lane FLY-1): a SPECIAL_TOGGLE_MOUNTED power (0x38) of a giant bird (AI vslot 0x168) sets MOVING_TO_DISMOUNT (status 0x5B): its flight
 		// to the point is not raised over the ground (GiantBirdNormalFlightState RW 0x76AD1D), the fell beast lands
 		static const int kToggleMounted = 0x38;
-		if (bird && m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->m_type == kToggleMounted)
+		if (bird && m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->getSpecialPowerType() == kToggleMounted)
 		{
 			obj->setStatus((unsigned)CombatNames::status("MOVING_TO_DISMOUNT"), true);
 		}
@@ -1116,7 +1116,7 @@ void SpecialAbilityUpdate::approachTarget()
 // (+ 0x114 bit 3) prepares 0 frames (it triggers at once); else PreparationTime
 unsigned SpecialAbilityUpdate::preparationFrames() const
 {
-	if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->m_type == 0x27)
+	if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->getSpecialPowerType() == 0x27)
 	{
 		static const int kShrubbery = ObjectTemplateInfoBuilder::kindOfIndex("SHRUBBERY");
 		static const int kGrabAndKill = ObjectTemplateInfoBuilder::kindOfIndex("GRAB_AND_KILL");
@@ -1141,7 +1141,7 @@ void SpecialAbilityUpdate::startPreparation()
 		setUnpackingVariation();
 	}
 	// RW 0x853CE5 .. 0x853E1B: the capture enums (0x15 and 0x1A: S-860)
-	const int prepType = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->m_type : 0;
+	const int prepType = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->getSpecialPowerType() : 0;
 	if (prepType == 0x1D)
 	{
 		// lane HERO-2, RW 0x853D31 .. 0x853D9F: SPECIAL_INFANTRY_CAPTURE_BUILDING: a target of the object's own team ends the preparation here (no trigger, no
@@ -1181,7 +1181,7 @@ bool SpecialAbilityUpdate::withinAbortRange() const
 		}
 		dist2 = CircleDistanceSquaredToPoint(*obj->getPosition(), CombatQueries::boundingCircleRadius(*obj), m_targetPos);
 		// lane STARTRANGE-1: RW 0x8523FC .. 0x85240B: SPECIAL_GRAB_PASSENGER (0x27) takes 400.0 (RW 0xC55874) off it here too (subss)
-		if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->m_type == 0x27)
+		if (m_data->m_specialPowerTemplate && m_data->m_specialPowerTemplate->getSpecialPowerType() == 0x27)
 		{
 			dist2 = SimMath::sseSub(dist2, 400.0f);
 		}
@@ -1201,7 +1201,7 @@ bool SpecialAbilityUpdate::continuePreparation()
 	{
 		return false;
 	}
-	const int type = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->m_type : 0;
+	const int type = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->getSpecialPowerType() : 0;
 	if (type == 0x15)
 	{
 		++m_unported;
@@ -1246,7 +1246,7 @@ void SpecialAbilityUpdate::triggerAbilityEffect()
 	}
 	// RW 0x853F9C: the light points (no manager in a skirmish, S-531); RW 0x853FC0: TriggerSound / ActiveLoopSound (client)
 	const SpecialPowerTemplate *t = m_data->m_specialPowerTemplate;
-	const int type = t ? t->m_type : 0;
+	const int type = t ? t->getSpecialPowerType() : 0;
 	if (type == 0x80 || type == 0x8F)
 	{
 		// RW 0x854841: the object's AutoHealBehavior is triggered by the button (Aragorn's Athelas, RW 0x855431)
@@ -1421,9 +1421,9 @@ bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 	}
 	const SpecialPowerTemplate *spt = spm->getSpecialPowerTemplate();
 	Object *building = nullptr;
-	if (spt && spt->m_objectFilter && ObjectFilterMatch::isValid(spt->m_objectFilter.get()))
+	if (spt && spt->getObjectFilter() && ObjectFilterMatch::isValid(spt->getObjectFilter().get()))
 	{
-		if (!ObjectFilterMatch::allows(logic, *spt->m_objectFilter, *t, nullptr))
+		if (!ObjectFilterMatch::allows(logic, *spt->getObjectFilter(), *t, nullptr))
 		{
 			return false;
 		}
@@ -1465,7 +1465,7 @@ bool SpecialAbilityUpdate::captureTarget(SpecialPowerModule *spm)
 	t->setCapturerID(INVALID_ID);    // RW 0x854740
 	logic.skirmishAI().objectAdded(*building); // RW 0x85474D: and the add with the new one (the team change's own pair ran too: a building that changed owner is
 	                                           // registered twice, RW's plain push_back)
-	if (spt && spt->m_type == 0x1A)
+	if (spt && spt->getSpecialPowerType() == 0x1A)
 	{
 		spm->startPowerRecharge(1.0f); // RW 0x854764
 	}
@@ -1518,7 +1518,7 @@ bool SpecialAbilityUpdate::handlePackingProcessing()
 			obj->setOrientation(SimMath::addf32(obj->getOrientation(), 3.14159274f)); // lane HERO-2, RW 0x851F05: addss PI (RW 0xBDD388), RW 0x70C31E
 		}
 		m_packingState = 4;
-		const int type = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->m_type : 0;
+		const int type = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->getSpecialPowerType() : 0;
 		if (type == 0x1D)
 		{
 			// lane HERO-2, RW 0x851F39 .. 0x851FE7: the target no other object is capturing (+ 0x80) loses CANCEL_CAPTURE, records the capturer and plays
@@ -1564,7 +1564,7 @@ void SpecialAbilityUpdate::startPacking(bool success)
 	setUnpackingVariation();
 	// RW 0x853596: PackSound (client)
 	const SpecialPowerTemplate *t = m_data->m_specialPowerTemplate;
-	if ((!t || t->m_type != 0x2A) && obj->getAIUpdateInterface())
+	if ((!t || t->getSpecialPowerType() != 0x2A) && obj->getAIUpdateInterface())
 	{
 		obj->getAIUpdateInterface()->aiBusy(CMD_FROM_AI); // RW 0x852E2A(0, 2): AI command 0x31
 	}
@@ -1594,7 +1594,7 @@ void SpecialAbilityUpdate::startUnpacking()
 		}
 	}
 	// RW 0x85383E .. 0x8538B6: SPECIAL_GRAB_CHUNK (0x28) and SPECIAL_SMITE_CANCELDISGUISE (0x84); UnpackSound (client)
-	const int unpackType = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->m_type : 0;
+	const int unpackType = m_data->m_specialPowerTemplate ? m_data->m_specialPowerTemplate->getSpecialPowerType() : 0;
 	if (unpackType == 0x28)
 	{
 		++m_unported; // RW 0x85384C: the grab enum's model condition (S-860)
@@ -1711,7 +1711,7 @@ void SpecialAbilityUpdate::finishAbility(bool ownerDying, bool aborted)
 		(void)spm; // RW 0x853148: the power module's vslot 0x4C (the "update finished" notice, RW 0x896F8E: S-859)
 	}
 	const SpecialPowerTemplate *t = m_data->m_specialPowerTemplate;
-	const int type = t ? t->m_type : 0;
+	const int type = t ? t->getSpecialPowerType() : 0;
 	if (type == 0x80 || type == 0x8F)
 	{
 		// RW 0x8531C9: the AutoHealBehavior goes back to waiting for its button (RW 0x85541B)
@@ -2704,7 +2704,7 @@ bool SpecialAbilityUpdate::isPowerCurrentlyInUse() const
 	}
 	if (const SpecialPowerTemplate *t = m_data->m_specialPowerTemplate)
 	{
-		const int type = t->m_type;
+		const int type = t->getSpecialPowerType();
 		if (type == 0x1D || type == 0x1A) // RW 0x851CF5 / 0x851CFA: the capture types (finishAbility's RW 0x85318F)
 		{
 			return true;

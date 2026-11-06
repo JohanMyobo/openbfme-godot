@@ -173,6 +173,7 @@ private:
 	std::uint8_t templateAudio(const ThingTemplate &tt);
 	Stats m_stats;
 	ScriptAudioStats m_scriptAudio;
+	std::vector<std::string> m_musicStack; ///< notre version, BFME1 : AUDIO_PUSH_MUSIC / AUDIO_POP_MUSIC
 	std::unique_ptr<Resolver> m_resolver;
 	std::unique_ptr<MusicScripts> m_music;
 	std::string m_musicError;

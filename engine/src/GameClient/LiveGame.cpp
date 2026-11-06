@@ -49,6 +49,7 @@
 #include "Common/BfmeGame.h"
 #include "Libraries/WWVegas/WW3D2/assetmgr.h"
 
+#include <cstring>
 #include <chrono>
 #include <stdexcept>
 
@@ -846,11 +847,27 @@ public:
 		, m_audio(audio)
 		, m_files(ScriptAudioLength::makeProbeCache(fs))
 	{
+		if (isBfme1Data(fs))
+		{
+			// notre version : les voix de BFME1 sont sous lang\<langue>\ (lotrbfme.exe 0x4B33F0), comme les cherche le son (GodotRetailFileSystem::bfme1LanguageDir)
+			FilenameList found;
+			fs.getFileListInDirectory("lang", "", "headertemplate.ini", found, true);
+			for (const std::string &f : found)
+			{
+				// la vue transitoire de GodotRetailFileSystem expose aussi le fichier à la racine : seul celui du dossier de langue compte
+				if (f.find_first_of("/\\") != std::string::npos)
+				{
+					m_localizedPrefix = f.substr(0, f.size() - std::strlen("headertemplate.ini"));
+					std::replace(m_localizedPrefix.begin(), m_localizedPrefix.end(), '/', '\\');
+					break;
+				}
+			}
+		}
 	}
 	// lane SCRIPT-3: HAS_FINISHED_AUDIO's length model (RW 0x4541FF, stop S-1187; GameClient/ScriptAudioLength)
 	bool audioLengthMs(const std::string &name, std::int32_t &ms, bool &picked) override
 	{
-		return ScriptAudioLength::lengthMs(m_audio, *m_files, name, ms, picked);
+		return ScriptAudioLength::lengthMs(m_audio, *m_files, name, ms, picked, m_localizedPrefix);
 	}
 	// lane BFME2CAMP1: the HUD's view (LiveGame::setScriptLocalView), none in a headless game
 	// (review: the values the main thread published for this frame, LiveGame::publishScriptLocalView; the logic may run on the worker)
@@ -884,6 +901,7 @@ private:
 	GameLogic &m_logic;
 	AIWorld *m_ai;
 	const AudioIniState &m_audio;
+	std::string m_localizedPrefix; ///< notre version, BFME1 (voir le constructeur)
 	std::shared_ptr<AudioAssetCache> m_files; ///< probes only (no decoded budget)
 };
 } // namespace

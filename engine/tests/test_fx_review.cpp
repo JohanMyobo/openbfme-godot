@@ -47,6 +47,24 @@ TEST_CASE("review: only non-deferred ALPHA sprite batches are reordered back to 
 	CHECK(!SpriteBatchDepthSorted(PARTICLE_SHADER_ALPHA_TEST, false));
 }
 
+TEST_CASE("review: BFME1 particle textures live in the flat Art\\Textures folder (lotrbfme.exe knows no compiled folder)")
+{
+	std::set<std::string> files = { "art\\textures\\excracks.dds" };
+	auto exists = [&](const std::string &p) { return files.count(p) != 0; };
+	ParticleTextureResolution r = ResolveParticleTexture("EXCracks.tga", exists, true);
+	REQUIRE(r.Found);
+	CHECK(r.Kind == ParticleTextureResolution::DDS);
+	CHECK(r.Path == "art\\textures\\excracks.dds");
+	// the same order as the other games: DDS, then TGA, then JPG
+	files = { "art\\textures\\foo.jpg", "art\\textures\\foo.tga" };
+	CHECK(ResolveParticleTexture("foo.tga", exists, true).Kind == ParticleTextureResolution::TGA);
+	// RotWK's layout does not change: its compiled folder only, this flat file stays out of reach
+	files = { "art\\textures\\excracks.dds" };
+	CHECK(!ResolveParticleTexture("EXCracks.tga", exists).Found);
+	// a name that is nowhere is still a miss
+	CHECK(!ResolveParticleTexture("SMUDGE.tga", exists, true).Found);
+}
+
 TEST_CASE("review: particle texture resolution tries DDS, TGA, JPG in the compiled folder; PNG is auxiliary after a JPG only (RW 0x530d29)")
 {
 	std::set<std::string> files;

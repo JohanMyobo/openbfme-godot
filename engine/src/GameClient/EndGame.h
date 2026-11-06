@@ -88,6 +88,7 @@ struct EndGameView
 	// lane SCRIPT-1: the logic ScriptEngine runs the side libraries (Multiplayer_Human's VICTORY / DEFEAT); its end requests for the local player's side
 	bool logicScripts = false;
 	std::vector<bool> scriptEnds; ///< in execution order: true VICTORY / QUICKVICTORY, false DEFEAT
+	unsigned scriptVictoryScreens = 0; ///< notre version, BFME1 : les actions VICTORY_SCREEN exécutées, quel que soit le camp du script (doVictory lit le joueur local)
 
 	bool sameAs(const EndGameView &o) const;
 	// Must run on the thread that owns the simulation, between frames; `previous` (may be null) is returned when nothing changed
@@ -196,6 +197,7 @@ private:
 	int m_mode = 2, m_kind = 3;
 	size_t m_eventsSeen = 0;
 	size_t m_scriptEndsSeen = 0; ///< lane SCRIPT-1
+	unsigned m_scriptVictoryScreensSeen = 0; ///< notre version, BFME1
 	bool m_showing = false, m_shownOnce = false, m_hiddenOnce = false, m_fadeToScore = false, m_lastWasVictory = false;
 	bool m_singleAlliance = false;
 	double m_shownAt = 0.0;

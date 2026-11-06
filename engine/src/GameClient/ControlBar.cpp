@@ -387,9 +387,9 @@ ButtonState ControlBar::evaluate(const CommandButton &b, Object &obj, bool &comm
 					return ButtonState::Restricted;
 				}
 			}
-			for (unsigned i = 0; i < t->m_preventActivationConditions.size() * 32; ++i)
+			for (unsigned i = 0; i < t->getPreventActivationConditions().size() * 32; ++i)
 			{
-				if ((t->m_preventActivationConditions[i / 32] & (1u << (i % 32))) && obj.testStatus(i))
+				if ((t->getPreventActivationConditions()[i / 32] & (1u << (i % 32))) && obj.testStatus(i))
 				{
 					return ButtonState::Restricted;
 				}

@@ -7,7 +7,7 @@
 #include "Common/Audio/AudioEventRTS.h"
 #include "Common/Audio/AudioIni.h"
 
-bool ScriptAudioLength::lengthMs(const AudioIniState &audio, AudioAssetCache &files, const std::string &name, std::int32_t &ms, bool &picked)
+bool ScriptAudioLength::lengthMs(const AudioIniState &audio, AudioAssetCache &files, const std::string &name, std::int32_t &ms, bool &picked, const std::string &localizedPrefix)
 {
 	ms = 0;
 	picked = false;
@@ -30,7 +30,12 @@ bool ScriptAudioLength::lengthMs(const AudioIniState &audio, AudioAssetCache &fi
 	{
 		AudioDecode::AudioInfo probe;
 		std::string error;
-		if (files.probe(file, &probe, &error) && probe.sampleRate != 0)
+		bool found = files.probe(file, &probe, &error);
+		if (!found && !localizedPrefix.empty())
+		{
+			found = files.probe(AudioEventLocalizedFile(audio.settings, first, file, localizedPrefix), &probe, &error);
+		}
+		if (found && probe.sampleRate != 0)
 		{
 			total += (std::int64_t)(probe.frames * 1000u / probe.sampleRate);
 		}

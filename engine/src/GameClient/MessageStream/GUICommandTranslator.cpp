@@ -45,6 +45,21 @@ MessageDisposition GUICommandTranslator::translate(const ClientMessage &msg)
 				return MessageDisposition::Destroy;
 			}
 			break;
+		case CMSG_MOUSE_LEFT_CLICK:
+		case CMSG_MOUSE_LEFT_DOUBLE_CLICK:
+			// FAITS CIBLE BFME1 (lotrbfme.exe 0x5B1C70, open-bfme-1 Rva005B1C70.cpp) : avec la souris alternée, un clic gauche non glissé annule toute commande en attente
+			// (setCommand(0)) et le message continue son chemin (disposition 0). Le pouvoir du grimoire attend hors d'InGameUI, d'où le crochet
+			if (!m_leftDragged && m_commands.rightClickCarriesTarget())
+			{
+				if (m_hudLeftCancel)
+				{
+					m_hudLeftCancel();
+				}
+				m_ctx.ui.setGUICommand(nullptr);
+				m_ctx.ui.clearAttackMoveToMode();
+				return disp;
+			}
+			break;
 		default:
 			break;
 	}

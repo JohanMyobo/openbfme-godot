@@ -680,13 +680,13 @@ void SpecialPowerModule::triggerSpecialPower(const Coord3D *loc, const Object *)
 	{
 		const Player *owner = obj->getControllingPlayer();
 		const int playerIndex = owner ? owner->getPlayerIndex() : -1;
-		if (t && !t->m_initiateSound.empty())
+		if (t && !t->getInitiateSound().empty())
 		{
-			AudioApi::playSoundForObject(t->m_initiateSound, obj->getID(), playerIndex);
+			AudioApi::playSoundForObject(t->getInitiateSound(), obj->getID(), playerIndex);
 		}
-		if (loc && t && !t->m_initiateAtLocationSound.empty())
+		if (loc && t && !t->getInitiateAtLocationSound().empty())
 		{
-			AudioApi::playSoundAtPositionForPlayer(t->m_initiateAtLocationSound, *loc, playerIndex);
+			AudioApi::playSoundAtPositionForPlayer(t->getInitiateAtLocationSound(), *loc, playerIndex);
 		}
 	}
 	createViewObject(loc); // RW 0x896FD9
@@ -727,7 +727,7 @@ void SpecialPowerModule::triggerSpecialPower(const Coord3D *loc, const Object *)
 		}
 	}
 	Player *player = obj->getControllingPlayer();
-	if (player && t && t->m_lightPointCost != 0)
+	if (player && t && t->getLightPointCost() != 0)
 	{
 		++m_unported; // RW 0x6AA91D: Player + 0x33C -= LightPointCost (the light point system is not ported, S-531)
 	}
@@ -870,7 +870,7 @@ void SpecialPowerModule::triggerSpecialPower(const Coord3D *loc, const Object *)
 void SpecialPowerModule::createViewObject(const Coord3D *loc)
 {
 	const SpecialPowerTemplate *t = getSpecialPowerTemplate();
-	if (!loc || !t || !(t->m_viewObjectRange != 0.0f) || t->m_viewObjectDuration == 0)
+	if (!loc || !t || !(t->getViewObjectRange() != 0.0f) || t->getViewObjectDuration() == 0)
 	{
 		return;
 	}
@@ -894,11 +894,11 @@ void SpecialPowerModule::createViewObject(const Coord3D *loc)
 		return;
 	}
 	view->setPosition(loc);
-	view->setShroudClearingRange(t->m_viewObjectRange); // RW 0x68C234 (lane DECOMP-1)
+	view->setShroudClearingRange(t->getViewObjectRange()); // RW 0x68C234 (lane DECOMP-1)
 	view->updateShroudNow();                            // RW 0x68C7E9
 	if (DeletionUpdate *del = dynamic_cast<DeletionUpdate *>(view->findModule("DeletionUpdate")))
 	{
-		del->setLifetimeRange(t->m_viewObjectDuration, t->m_viewObjectDuration); // RW 0x896F95 .. (0x88B830)
+		del->setLifetimeRange(t->getViewObjectDuration(), t->getViewObjectDuration()); // RW 0x896F95 .. (0x88B830)
 	}
 	++m_viewObjects;
 }
@@ -1299,7 +1299,7 @@ bool SpecialPowerModules::canUseSpecialPower(const Object &obj, const SpecialPow
 	{
 		for (unsigned b = 0; b < 32; ++b)
 		{
-			if (((t->m_preventActivationConditions[w] >> b) & 1u) && obj.testStatus(w * 32 + b))
+			if (((t->getPreventActivationConditions()[w] >> b) & 1u) && obj.testStatus(w * 32 + b))
 			{
 				return false;
 			}

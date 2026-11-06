@@ -69,6 +69,15 @@ void AptPalantir::hook(const std::string &name)
 					m_heroSelect(m_heroSelectPath, true);
 				}
 			}
+			// FAIT CIBLE BFME1 : pas de InGameSpellBook.swf, le grimoire est le clip SpellBookUI de Palantir.apt, montré par InitialSetup (gotoAndStop("_show"))
+			if (m_bfme1 && m_spellPath.empty())
+			{
+				m_spellPath = "SpellBookUI";
+				m_spellShown = true;
+				std::fill_n(m_spellState, kSpellSlots, -1);
+				std::fill_n(m_spellButton, kSpellSlots, -1);
+				std::fill_n(m_spellWasUsable, kBfme1SpellButtons, true); // lotrbfme.exe 0x997790 : std::fill(at08, at08 + 20, true)
+			}
 		}
 		else if (name == "PalantirCommandUI::OnButtonFrameLoaded" || name == "OnAptInGameSideCommandBarButtonFrameLoaded")
 		{
@@ -277,6 +286,22 @@ void AptPalantir::setBfme1(bool value)
 				m_press(m_arc[i].slot, true);
 			}
 		});
+		// FAIT CIBLE BFME1 (lotrbfme.exe aptPalantirOnButtonSpell, Open-BFME GameClient/GUI/AptPalantirOnButtonSpell.cpp) : « Spell<n> », le bouton n - 1 du livre
+		registerCommand("AptPalantir::OnBttnSpell", [this](const std::string &arg) {
+			m_log.push_back("AptPalantir::OnBttnSpell(" + arg + ")");
+			if (arg.compare(0, 5, "Spell") == 0)
+			{
+				const int slot = std::atoi(arg.c_str() + 5) - 1;
+				if (slot < kBfme1SpellSlots)
+				{
+					pressSpellSlot(slot); // 0x989700 : hors de [0, 12) ou sans bouton, rien
+				}
+			}
+		});
+		// FAIT CIBLE BFME1 (aptPalantirOnSpellBookUIShown -> 0x997F30) : un simple ret
+		registerCommand("AptPalantir::OnSpellBookUIShown", [this](const std::string &arg) {
+			m_log.push_back("AptPalantir::OnSpellBookUIShown(" + arg + ")");
+		});
 	}
 	m_bfme1 = value;
 }
@@ -289,6 +314,14 @@ const AptPalantir::NativeImage *AptPalantir::imageForClip(const std::string &cli
 			const std::string frame = levelPrefix() + "CommandButtons.Command" + std::to_string(i + 1);
 			if (clipPath.compare(0, frame.size() + 1, frame + ".") == 0) return imageFor(frame);
 		}
+	if (m_bfme1)
+	{
+		const int spellSlot = bfme1SpellSlotOfClip(clipPath);
+		if (spellSlot >= 0)
+		{
+			return imageFor(levelPrefix() + "SpellBookUI.Spell" + std::to_string(spellSlot + 1)); // lotrbfme.exe 0x997790 : l'image liée à « Palantir/SpellBookUI/Spell%d/ »
+		}
+	}
 	if (m_bfme1)
 	{
 		// notre version : le portrait d'un bouton HeroSelectUI.Hero<n> de BFME1 est l'image que la barre des héros donne à « <clip>_Hero<n>Image »
@@ -316,6 +349,29 @@ float AptPalantir::timerFor(const std::string &key) const
 {
 	auto it = m_timers.find(key);
 	return it == m_timers.end() ? -1.0f : it->second;
+}
+
+float AptPalantir::timerForClip(const std::string &clipPath, const std::string &timerId) const
+{
+	const int spellSlot = m_bfme1 ? bfme1SpellSlotOfClip(clipPath) : -1;
+	return spellSlot >= 0 ? timerFor("SpellBookUI/Spell" + std::to_string(spellSlot + 1) + "/Timer") : timerFor(timerId);
+}
+
+int AptPalantir::bfme1SpellSlotOfClip(const std::string &clipPath) const
+{
+	const std::string bar = levelPrefix() + "SpellBookUI.Spell";
+	if (clipPath.compare(0, bar.size(), bar) != 0)
+	{
+		return -1;
+	}
+	const size_t dot = clipPath.find('.', bar.size());
+	const std::string n = clipPath.substr(bar.size(), dot == std::string::npos ? std::string::npos : dot - bar.size());
+	if (n.empty() || n.find_first_not_of("0123456789") != std::string::npos) // Spell1Highlight est un autre clip
+	{
+		return -1;
+	}
+	const int slot = std::atoi(n.c_str()) - 1;
+	return slot >= 0 && slot < kBfme1SpellSlots ? slot : -1;
 }
 
 // lane HUD-5: the clip state of a command button (RW 0x9D2BEE, from its window's status; the populate RW 0x943C04 sets the status from the availability):
@@ -1366,6 +1422,11 @@ void AptPalantir::syncSpellBook(const std::vector<SpellSlot> &slots)
 	{
 		return;
 	}
+	if (m_bfme1)
+	{
+		syncSpellBookBfme1(slots);
+		return;
+	}
 	if (!m_spellShown)
 	{
 		call(m_spellPath, "SetState", { "_show" }); // RW 0x9312DE
@@ -1428,6 +1489,59 @@ void AptPalantir::syncSpellBook(const std::vector<SpellSlot> &slots)
 			call(m_spellPath, "FlashButton", { std::to_string(i + 1) }); // RW 0x931467 .. 0x9314C3
 		}
 	}
+}
+
+// FAIT CIBLE BFME1 (lotrbfme.exe 0x997A30) : les 20 boutons du jeu de commandes du grimoire, tassés dans les 12 boutons du film : les pouvoirs cachés (disponibilité 3) sont
+// sautés, l'image et l'état (SetSpellButtonState(n, nom), 0x9641D0 : indice + 1, mêmes noms que RotWK, table 0x11098B0) ne sont envoyés qu'au changement, puis les boutons
+// restants passent à _unused (0x997D77). FlashSpellButton (0x42791C -> 0x9642A0) accueille un pouvoir qui devient utilisable (états 3 et 5). Le clignotement du script
+// CAMEO_FLASH (SetSpellButtonFlashEffectState, 0x997C2F .. 0x997C7E) n'est pas porté : CAMEO_FLASH lui-même ne l'est pas
+void AptPalantir::syncSpellBookBfme1(const std::vector<SpellSlot> &slots)
+{
+	bool usableNow[kBfme1SpellButtons] = {};
+	for (int i = 0; i < kBfme1SpellSlots; ++i)
+	{
+		const SpellSlot empty;
+		const SpellSlot &sl = i < (int)slots.size() ? slots[(size_t)i] : empty;
+		const std::string number = std::to_string(i + 1);
+		if (sl.image != m_spellImage[i])
+		{
+			const std::string imageKey = levelPrefix() + "SpellBookUI.Spell" + number;
+			if (sl.image.empty())
+			{
+				m_images.erase(imageKey);
+			}
+			else
+			{
+				m_images[imageKey] = NativeImage{ sl.image, false };
+			}
+			m_spellImage[i] = sl.image;
+		}
+		const std::string timerKey = "SpellBookUI/Spell" + number + "/Timer";
+		if (sl.timer >= 0.0f && sl.timer < 1.0f)
+		{
+			m_timers[timerKey] = sl.timer;
+		}
+		else
+		{
+			m_timers.erase(timerKey);
+		}
+		m_spellButton[i] = sl.buttonIndex;
+		if (sl.state != m_spellState[i])
+		{
+			call("", "SetSpellButtonState", { number, spellStateName(sl.state) });
+			m_spellState[i] = sl.state;
+		}
+		if (sl.buttonIndex >= 0 && sl.buttonIndex < kBfme1SpellButtons)
+		{
+			const bool usable = sl.state == SPELL_UP || sl.state == SPELL_STATIC;
+			usableNow[sl.buttonIndex] = usable;
+			if (usable && !m_spellWasUsable[sl.buttonIndex])
+			{
+				call("", "FlashSpellButton", { number });
+			}
+		}
+	}
+	std::copy_n(usableNow, kBfme1SpellButtons, m_spellWasUsable);
 }
 
 bool AptPalantir::pressSpellSlot(int slot)

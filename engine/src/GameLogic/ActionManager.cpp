@@ -67,13 +67,13 @@ const SpecialPowerTemplate *powerOf(const CommandButton &b)
 // (HordeContain::payloadCount), as the trigger's payment reads it (RW 0x855273)
 bool unitCostMet(const Object &obj, const SpecialPowerTemplate &t)
 {
-	if (t.m_unitCost == 0)
+	if (t.getUnitCost() == 0)
 	{
 		return true;
 	}
 	ContainModuleInterface *c = obj.getContain();
 	const HordeContain *h = c && c->getHordeContainInterface() ? dynamic_cast<const HordeContain *>(c) : nullptr;
-	return !h || h->payloadCount() >= (unsigned)t.m_unitCost;
+	return !h || h->payloadCount() >= (unsigned)t.getUnitCost();
 }
 
 // RW 0x82C366 (lane WALL-2): the pathfinder exists; the object's AI follows a path (RW 0x6628CD: AIUpdate + 0x1FC 1 or 4, a path, and a node of it carries a
@@ -126,11 +126,11 @@ bool waterCellAt(GameLogic &logic, const Coord3D &pos)
 // inside the circle (SSE on the cvtsi2ss values)
 bool waterTestPasses(GameLogic &logic, const Coord3D &loc, const SpecialPowerTemplate &t)
 {
-	if (t.m_flags & SPF_WATER_OK)
+	if (t.getFlags() & SPF_WATER_OK)
 	{
 		return true;
 	}
-	const int r = SimMath::truncToInt32(t.m_radiusCursorRadius);
+	const int r = SimMath::truncToInt32(t.getRadiusCursorRadius());
 	if (r <= 0)
 	{
 		return !waterCellAt(logic, loc);
@@ -330,7 +330,7 @@ bool hasKindBit(const Object &o, int bit)
 bool summonSpotClear(Object &obj, const Coord3D &loc, const SpecialPowerTemplate &t)
 {
 	GameLogic &logic = obj.logic();
-	const float r = t.m_radiusCursorRadius;
+	const float r = t.getRadiusCursorRadius();
 	static const int kInert = kindBit("INERT"), kNoCollide = kindBit("NO_COLLIDE"), kIgnoredInGui = kindBit("IGNORED_IN_GUI"), kRockVendor = kindBit("ROCK_VENDOR"),
 					 kTaintEffect = kindBit("TAINTEFFECT"), kImmobile = kindBit("IMMOBILE"), kStructure = kindBit("STRUCTURE"), kBaseSite = kindBit("BASE_SITE"),
 					 kCrate = kindBit("CRATE");
@@ -686,25 +686,25 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 		}
 		float loX = 0.0f, loY = 0.0f, hiX = 0.0f, hiY = 0.0f;
 		terrain->getMaximumPathfindExtent(loX, loY, hiX, hiY);
-		const float r = t.m_radiusCursorRadius;
+		const float r = t.getRadiusCursorRadius();
 		if (!(loc.x > SimMath::addf32(loX, r) && SimMath::subf32(hiX, r) > loc.x && loc.y > SimMath::addf32(loY, r) && SimMath::subf32(hiY, r) > loc.y))
 		{
 			return false;
 		}
 	}
 	// RW 0x82D3A3 (LIMIT_DISTANCE): MaxCastRange^2 > (dz^2 + dy^2) + dx^2 of the object's position minus the location (SSE)
-	if (t.m_flags & SPF_LIMIT_DISTANCE)
+	if (t.getFlags() & SPF_LIMIT_DISTANCE)
 	{
 		const Coord3D *p = obj.getPosition();
 		const float dx = SimMath::subf32(p->x, loc.x), dy = SimMath::subf32(p->y, loc.y), dz = SimMath::subf32(p->z, loc.z);
 		const float d2 = SimMath::addf32(SimMath::addf32(SimMath::mulf32(dz, dz), SimMath::mulf32(dy, dy)), SimMath::mulf32(dx, dx));
-		if (!(SimMath::mulf32(t.m_maxCastRange, t.m_maxCastRange) > d2))
+		if (!(SimMath::mulf32(t.getMaxCastRange(), t.getMaxCastRange()) > d2))
 		{
 			return false;
 		}
 	}
 	// RW 0x82D2C9 (PATHABLE_ONLY): RW 0x6F5BB0(obj, its position, loc, 0) (RW 0x82D2F5: no locomotor set given), Pathfinder::quickDoesPathExist (lane QPATH-1)
-	if (t.m_flags & SPF_PATHABLE_ONLY)
+	if (t.getFlags() & SPF_PATHABLE_ONLY)
 	{
 		AIUpdateInterface *ai = obj.getAIUpdateInterface();
 		AIWorld *world = logic.aiWorld();
@@ -725,23 +725,23 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 	}
 	const Player *player = obj.getControllingPlayer();
 	// RW 0x82DEA6 (NEEDS_OBJECT_FILTER): some live object within RadiusCursorRadius (distance type 0) passes ObjectFilter for the controlling player
-	if (t.m_flags & SPF_NEEDS_OBJECT_FILTER)
+	if (t.getFlags() & SPF_NEEDS_OBJECT_FILTER)
 	{
-		const ObjectFilter &f = filterOrDefault(t.m_objectFilter);
+		const ObjectFilter &f = filterOrDefault(t.getObjectFilter());
 		PartitionFilterFn pass([&](Object &o) { return ObjectFilterMatch::allows(logic, f, o, player); });
 		PartitionFilterFn alive([](Object &o) { return !o.isEffectivelyDead(); });
-		if (logic.partition().iterateObjectsInRange(loc, t.m_radiusCursorRadius, FROM_CENTER_2D, { &pass, &alive }, ITER_FASTEST).empty())
+		if (logic.partition().iterateObjectsInRange(loc, t.getRadiusCursorRadius(), FROM_CENTER_2D, { &pass, &alive }, ITER_FASTEST).empty())
 		{
 			return false;
 		}
 	}
 	// RW 0x82D2FD (NO_FORBIDDEN_OBJECTS): no live object within ForbiddenObjectRange (distance type 1) passes ForbiddenObjectFilter
-	if (t.m_flags & SPF_NO_FORBIDDEN_OBJECTS)
+	if (t.getFlags() & SPF_NO_FORBIDDEN_OBJECTS)
 	{
-		const ObjectFilter &f = filterOrDefault(t.m_forbiddenObjectFilter);
+		const ObjectFilter &f = filterOrDefault(t.getForbiddenObjectFilter());
 		PartitionFilterFn pass([&](Object &o) { return ObjectFilterMatch::allows(logic, f, o, player); });
 		PartitionFilterFn alive([](Object &o) { return !o.isEffectivelyDead(); });
-		if (logic.partition().getClosestObject(loc, t.m_forbiddenObjectRange, FROM_CENTER_3D, { &pass, &alive }))
+		if (logic.partition().getClosestObject(loc, t.getForbiddenObjectRange(), FROM_CENTER_3D, { &pass, &alive }))
 		{
 			return false;
 		}
@@ -807,7 +807,7 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 	{
 		// RW 0x82EC27 (0x48 .. 0x4A): r = cvttss2si(RadiusCursorRadius); the grid +- (float)r with the step r / 5 (idiv) refused by vslot 0x54 or 0x50; an
 		// object of KindOf WALK_ON_TOP_OF_WALL (bit 0x3C, RW 0x444D39 / 0x445139) within (float)r (RW 0xA39090, distance type 0) -> no; then CLEAR
-		const int r = SimMath::truncToInt32(t.m_radiusCursorRadius);
+		const int r = SimMath::truncToInt32(t.getRadiusCursorRadius());
 		if (!gridClear(logic, loc, (float)r, r / 5, true))
 		{
 			return false;
@@ -823,7 +823,7 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 	case FINAL_GRID_PLANE:
 	{
 		// RW 0x82EA58 (0x59, 0x68): the same grid with vslot 0x54 only; then the status is not SHROUDED
-		const int r = SimMath::truncToInt32(t.m_radiusCursorRadius);
+		const int r = SimMath::truncToInt32(t.getRadiusCursorRadius());
 		return gridClear(logic, loc, (float)r, r / 5, false) && shroudAt(obj, loc) != CELLSHROUD_SHROUDED;
 	}
 	case FINAL_ARMY:
@@ -844,7 +844,7 @@ bool canDoSpecialPowerAtLocation(Object &obj, const Coord3D &loc, const SpecialP
 		const Coord3D *p = obj.getPosition();
 		const double dx = SimMath::pc24SubW((double)p->x, (double)loc.x), dy = SimMath::pc24SubW((double)p->y, (double)loc.y);
 		const double d2 = SimMath::pc24AddW(SimMath::pc24MulW(dy, dy), SimMath::pc24MulW(dx, dx));
-		const double r2 = SimMath::pc24MulW((double)t.m_viewObjectRange, (double)t.m_viewObjectRange);
+		const double r2 = SimMath::pc24MulW((double)t.getViewObjectRange(), (double)t.getViewObjectRange());
 		return !(r2 < d2);
 	}
 	case FINAL_UNPORTED:
@@ -876,8 +876,8 @@ bool canDoSpecialPowerAtObject(Object &obj, Object *target, CommandSourceType so
 	}
 	SpecialPowerModuleInterface *m = SpecialPowerModules::findModule(obj, power); // RW 0x68C26D
 	const bool isCapture = type == 0x1D || type == 0x1A;
-	const bool filterSet = ObjectFilterMatch::isValid(t.m_objectFilter.get()); // power + 0x60, RW 0x762977
-	if (filterSet && target && !ObjectFilterMatch::allows(logic, *t.m_objectFilter, *target, obj.getControllingPlayer())) // RW 0x7640C1(target, player)
+	const bool filterSet = ObjectFilterMatch::isValid(t.getObjectFilter().get()); // power + 0x60, RW 0x762977
+	if (filterSet && target && !ObjectFilterMatch::allows(logic, *t.getObjectFilter(), *target, obj.getControllingPlayer())) // RW 0x7640C1(target, player)
 	{
 		return false;
 	}

@@ -757,8 +757,8 @@ TEST_CASE("SPELL-2 retail (review r1): the reveal object and Cloud Break's sunbe
 	// the reveal object: Arrow Volley (ViewObjectDuration 10000 ms) leaves a SuperweaponPing at its target for 50 frames
 	const SpecialPowerTemplate *volley = TheSpecialPowerStore->findSpecialPowerTemplate("SpellBookArrowVolleyGood");
 	REQUIRE(volley);
-	REQUIRE(volley->m_viewObjectDuration == 50u);
-	REQUIRE(volley->m_viewObjectRange != 0.0f);
+	REQUIRE(volley->getViewObjectDuration() == 50u);
+	REQUIRE(volley->getViewObjectRange() != 0.0f); // tolerance: la condition du jeu est ViewObjectRange != 0 ; sa valeur ne compte pas dans ce test
 	for (ScienceType st : volley->getRequiredSciences())
 	{
 		g.player(0)->science().grantScience(st);
@@ -785,7 +785,7 @@ TEST_CASE("SPELL-2 retail (review r1): the reveal object and Cloud Break's sunbe
 	CHECK(made[0]->getControllingPlayer() == g.player(0));
 	// lane DECOMP-1: the reveal object's own clearing range is ViewObjectRange (RW 0x68C234, Object + 0x1B4), not its template's
 	CHECK(made[0]->hasShroudClearingRange());
-	CHECK(made[0]->shroudClearingRangeOverride() == volley->m_viewObjectRange);
+	CHECK(made[0]->shroudClearingRangeOverride() == volley->getViewObjectRange());
 	int deletion = 0;
 	for (const auto &c : g.logic->random().callLog())
 	{

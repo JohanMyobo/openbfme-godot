@@ -148,10 +148,10 @@ TEST_CASE("necrodie1 retail: the Necromancer's powers carry RotWK's UnitCost and
 	const SpecialPowerTemplate *well = TheSpecialPowerStore->findSpecialPowerTemplate("SpecialAbilityNecroWellOfSouls");
 	REQUIRE(fell != nullptr);
 	REQUIRE(well != nullptr);
-	CHECK(fell->getFinalOverride()->m_unitCost == 2);
-	CHECK(well->getFinalOverride()->m_unitCost == 4);
-	CHECK(fell->getFinalOverride()->m_unitCostDeathType == 3); // BURNED
-	CHECK(well->getFinalOverride()->m_unitCostDeathType == 3);
+	CHECK(fell->getFinalOverride()->getUnitCost() == 2);
+	CHECK(well->getFinalOverride()->getUnitCost() == 4);
+	CHECK(fell->getFinalOverride()->getUnitCostDeathType() == 3); // BURNED
+	CHECK(well->getFinalOverride()->getUnitCostDeathType() == 3);
 }
 
 TEST_CASE("necrodie1 retail: Fell Strength sacrifices 2 acolytes; the Necromancer and his horde live (RW 0x85521F)")

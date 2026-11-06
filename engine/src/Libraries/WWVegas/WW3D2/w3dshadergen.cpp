@@ -233,6 +233,10 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 	line("global uniform mat3 w3d_lcol_inf;");
 	line("global uniform mat3 w3d_ldir_inf;");
 	line("global uniform float w3d_fogged_frac;"); // lane VISUAL-2: RW 0x46DFD0 FogAlpha / ClearAlpha
+	// notre version, BFME1 : sur une carte au terrain masqué (la Moria), le décor porte le brouillard par pixel, comme m_shroudMaterialPass (Open-BFME-1, W3DScene.cpp:538)
+	line("global uniform float w3d_shroud_on;");
+	line("global uniform sampler2D w3d_shroud_tex;");
+	line("global uniform vec4 w3d_shroud_rect;"); // origine xy, étendue zw (SAGE), comme terrain_common.gdshaderinc
 	if (k.OcclusionPass == W3D_OCCLUSION_PASS_COLOR)
 	{
 		// lane OCCLUDE-1: the players' occluded colours by slot (0xAARRGGBB as RGBA8 texels, RTS3DSceneOcclusion::occludedColor) and the switch
@@ -723,6 +727,9 @@ std::string Generate_W3D_Shader_Code(const W3DShaderKey &k, W3DSamplerPolicy sam
 		line("}");
 		return c;
 	}
+	// notre version, BFME1 : le brouillard appartient à la scène de la partie : une instance d'une scène à elle (l'Apt View3D, le globe du Palantir) n'y est pas :
+	// sinon la bannière de victoire (SFE_GoodVW) ne se voit qu'à travers les cases explorées de la carte
+	line("\tif (w3d_shroud_on > 0.5 && v_instance.x < 1.5) { vec3 shroud_w = (INV_VIEW_MATRIX * vec4(v_vpos, 1.0)).xyz; cur.rgb *= texture(w3d_shroud_tex, (vec2(shroud_w.x, -shroud_w.z) - w3d_shroud_rect.xy) / w3d_shroud_rect.zw).r; }");
 	if (k.Fog != W3DHardwareFog::FOG_DISABLE)
 	{
 		// lane RENDER-4 (S-1651): the fog stage after the pixel shader (saturated output, D3D9), at the eye range of the fragment (the effects' vertex

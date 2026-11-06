@@ -1050,9 +1050,9 @@ CommandButtonHelp::Text CommandButtonHelp::composeRetail(const ControlBarButton 
 		const SpecialPowerTemplate *sp = TheSpecialPowerStore && !b->m_specialPowerName.empty()
 		                                     ? TheSpecialPowerStore->findSpecialPowerTemplate(b->m_specialPowerName)
 		                                     : nullptr;
-		if (sp && sp->getFinalOverride()->m_unitCost != 0)
+		if (sp && sp->getFinalOverride()->getUnitCost() != 0)
 		{
-			t.cost = formatOne(fetchOrMissing(text, "TOOLTIP:UnitCost"), u16(std::to_string(sp->getFinalOverride()->m_unitCost)));
+			t.cost = formatOne(fetchOrMissing(text, "TOOLTIP:UnitCost"), u16(std::to_string(sp->getFinalOverride()->getUnitCost())));
 		}
 	}
 	return t;

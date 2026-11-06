@@ -735,6 +735,39 @@ TEST_CASE("script r2: ordinal 385 stays whatever name it carries (its template's
 	CHECK(s.actions[3].params[1].intValue == 0);
 }
 
+TEST_CASE("notre version: VICTORY_SCREEN shows the end screen once, without the end-game timer (ScriptActions::doVictory)")
+{
+	EndGameController c;
+	c.start(0, 1);
+	EndGameView v;
+	v.localPlayerIndex = 0;
+	v.localAlive = true;
+	v.logicScripts = true;
+	c.update(&v, 10, 1000.0);
+	CHECK(c.takeRequests().empty());
+	v.scriptVictoryScreens = 2; // deux scripts « Announce Victory » dans la même image, comme à la Moria
+	c.update(&v, 11, 1100.0);
+	std::vector<EndGameRequest> requests = c.takeRequests();
+	REQUIRE(requests.size() == 1);
+	CHECK(requests[0].kind == EndGameRequest::SHOW_END_GAME);
+	CHECK(requests[0].text == "APT:EndVictorious");
+	CHECK(requests[0].sound == "Gui_VictoryScreen");
+	CHECK(requests[0].cheer == "Gui_VictoryCheerGood");
+	CHECK(c.endGameShowing());
+	CHECK(c.victoryScreen());
+	CHECK(c.endGameTimer() == -1);
+	// QUICKVICTORY arrive ensuite pendant la bannière : pas de seconde bannière, le minuteur démarre
+	v.scriptEnds = { true };
+	c.update(&v, 36, 6100.0);
+	CHECK(c.takeRequests().empty());
+	CHECK(c.endGameTimer() == EndGameController::kEndGameTimerFrames);
+	// les 7 s de updateEndGame la retirent (RW 0x808A31)
+	c.update(nullptr, 36, 8200.0);
+	requests = c.takeRequests();
+	REQUIRE(requests.size() == 1);
+	CHECK(requests[0].kind == EndGameRequest::HIDE_END_GAME);
+}
+
 TEST_CASE("script r2: a reused EndGameController shows the next game's script end screen (m_scriptEndsSeen resets in start())")
 {
 	EndGameController c;

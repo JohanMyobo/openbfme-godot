@@ -1264,6 +1264,33 @@ bool ScriptActions::executeOrderAction(ScriptEngine &engine, const ScriptActionR
 		}
 		return true;
 	}
+	if (name == "FIRE_SPECIAL_POWER_ON_TEAM")
+	{
+		// notre version, BFME1 (0x6F8340, ScriptActions_doFireSpecialPowerOnTeam.cpp ; le même modèle 447 chez RotWK) : l'équipe par son nom, puis le centre de
+		// ses membres (0x4EDCD0, voir teamCentreAllMembers), le pouvoir par son nom, et le même tireur que PLAYER_FIRE_SPECIAL_POWER_AT_WAYPOINT (0x6F48B0).
+		// La Moria invoque ainsi son Balrog : Mordor lance SpellBookBalrogAlly depuis son grimoire, sur l'équipe du marqueur « Balrog Spawn ». Sans cela,
+		// TEAM_CREATED(Balrog) reste faux et la scène ne rend jamais le contrôle au joueur.
+		Team *t = ScriptConditions::team(engine, param(a, 2).stringValue);
+		if (!t)
+		{
+			return true;
+		}
+		Coord3D centre{ 0.0f, 0.0f, 0.0f };
+		const bool hasMembers = ScriptConditions::teamCentreAllMembers(*t, centre);
+		const SpecialPowerTemplate *sp = TheSpecialPowerStore ? TheSpecialPowerStore->findSpecialPowerTemplate(param(a, 1).stringValue) : nullptr;
+		if (!sp)
+		{
+			return true;
+		}
+		if (!hasMembers)
+		{
+			// le jeu d'origine divise par 0 et tire à une position NaN (0x4EDCD0 ne teste pas le compte) : le port signale le cas au lieu de reproduire ce NaN
+			engine.note("FIRE_SPECIAL_POWER_ON_TEAM: team " + param(a, 2).stringValue + " has no member, retail fires at a NaN position; not fired");
+			return true;
+		}
+		fireSpecialPowerAtPosition(engine, param(a, 0).stringValue, *sp, centre);
+		return true;
+	}
 	if (name == "NAMED_FIRE_SPECIAL_POWER_AT_WAYPOINT" || name == "NAMED_FIRE_SPECIAL_POWER_AT_NAMED")
 	{
 		Object *o = engine.getUnitNamed(param(a, 0).stringValue); // RW 0x7C4A99 / 0x7C4CDB

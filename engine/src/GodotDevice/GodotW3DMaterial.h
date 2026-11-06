@@ -69,6 +69,9 @@ struct W3DMaterialResult
 	std::vector<std::string> Errors;  // textures that did not load, etc.
 };
 
+// the bytes of a retail texture into `image`; `dds` = the name ends in .dds. BFME1 hides PNG, JPEG and TGA files behind that name: its signature decides
+Error Decode_Retail_Texture(const Ref<Image> &image, const PackedByteArray &buffer, bool dds);
+
 // lane SDK-1 (GameClient/AssetPacks.h): the asset pack replacement of the texture `name` decoded by its own bytes (DDS, PNG, JPEG, else TGA),
 // or a null image when no pack replaces it. A pack file that cannot be read or decoded is a null image with `error` set ("asset pack P: F ...").
 // Shared by every texture loader of the render side (model surfaces, particles, decals, roads / rivers / water / sky): one precedence.
@@ -163,6 +166,8 @@ void W3D_Set_Sway_Offsets(const float offsets[10][3]);
 void W3D_Set_Sway_Scale(double scale);
 // lane VISUAL-2: the fogged light fraction (RW 0x46DFD0: FogAlpha / ClearAlpha) a fogged instance's lights and ambient are scaled by
 void W3D_Set_Fogged_Light_Frac(float frac);
+// notre version, BFME1 : le brouillard par pixel sur les modèles d'une carte au terrain masqué (la Moria), la grille du terrain en texture
+void W3D_Set_Model_Shroud(bool on, const Ref<Texture2D> &levels, const Vector2 &origin, const Vector2 &extent);
 // lane OCCLUDE-1: the behind-building colours (global w3d_occl_colors: a W3D_OCCLUSION_SLOTS x 1 RGBA8 texture, slot -> the colour, slot 0 unused) and
 // their switch (w3d_occl_on: GameData UseBehindBuildingMarker and TheGameLogic + 0x99); the caller owns the texture (GameWorld)
 void W3D_Set_Occlusion(bool on, const Ref<Texture2D> &colors);

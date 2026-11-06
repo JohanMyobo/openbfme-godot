@@ -75,7 +75,7 @@ bool EndGameView::sameAs(const EndGameView &o) const
 	return singleAllianceRemaining == o.singleAllianceRemaining && endFrame == o.endFrame && observer == o.observer && localPlayerIndex == o.localPlayerIndex &&
 		localEvil == o.localEvil && localAlive == o.localAlive && alliedVictory == o.alliedVictory && alliedDefeat == o.alliedDefeat &&
 		playerOnlyDefeat == o.playerOnlyDefeat && events.size() == o.events.size() && displayNames == o.displayNames && localRelationship == o.localRelationship &&
-		logicScripts == o.logicScripts && scriptEnds == o.scriptEnds;
+		logicScripts == o.logicScripts && scriptEnds == o.scriptEnds && scriptVictoryScreens == o.scriptVictoryScreens;
 }
 
 std::shared_ptr<const EndGameView> EndGameView::build(GameLogic &logic, const std::shared_ptr<const EndGameView> &previous)
@@ -98,6 +98,7 @@ std::shared_ptr<const EndGameView> EndGameView::build(GameLogic &logic, const st
 	// lane SCRIPT-1: the logic script engine's VICTORY / DEFEAT of the local player's side
 	const ScriptEngine &scripts = static_cast<const GameLogic &>(logic).scriptEngine();
 	view->logicScripts = scripts.loaded();
+	view->scriptVictoryScreens = scripts.victoryScreenRequests();
 	for (const ScriptEngine::EndRequest &e : scripts.endRequests())
 	{
 		if (e.playerIndex == view->localPlayerIndex)
@@ -414,6 +415,7 @@ void EndGameController::start(int mode, int kind)
 	m_kind = kind;
 	m_eventsSeen = 0;
 	m_scriptEndsSeen = 0; // lane SCRIPT-1: a reused controller sees the next game's end requests from the start
+	m_scriptVictoryScreensSeen = 0;
 	m_showing = m_shownOnce = m_hiddenOnce = m_fadeToScore = m_lastWasVictory = false;
 	m_singleAlliance = false;
 	m_shownAt = 0.0;
@@ -567,6 +569,13 @@ void EndGameController::update(const EndGameView *view, unsigned frame, double n
 	if (view->logicScripts)
 	{
 		const std::string overLabel = "APT:EndGameOver";
+		// notre version, BFME1 : VICTORY_SCREEN (ScriptActions::doVictory du décompilé) montre la bannière sans démarrer le minuteur de fin : seule l'action VICTORY
+		// le démarre (RW 0x7C45E0 -> RW 0x602FFE). Un second appel ne fait rien tant que la bannière est là (showEndGame, + 0x10)
+		if (m_scriptVictoryScreensSeen < view->scriptVictoryScreens)
+		{
+			m_scriptVictoryScreensSeen = view->scriptVictoryScreens;
+			showEndGame(view->localAlive ? "APT:EndVictorious" : overLabel, view->localEvil, "Gui_VictoryScreen", view->localEvil ? "Gui_VictoryCheerEvil" : "Gui_VictoryCheerGood", nowMs, true);
+		}
 		for (; m_scriptEndsSeen < view->scriptEnds.size(); ++m_scriptEndsSeen)
 		{
 			if (view->scriptEnds[m_scriptEndsSeen])

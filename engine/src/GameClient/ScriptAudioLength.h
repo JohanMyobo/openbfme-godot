@@ -20,7 +20,8 @@ class ArchiveFileSystem;
 namespace ScriptAudioLength
 {
 // false when the event has no info (TheAudio vslot 0x12C null)
-bool lengthMs(const AudioIniState &audio, AudioAssetCache &files, const std::string &name, std::int32_t &ms, bool &picked);
+// notre version, BFME1 : `localizedPrefix` (lang\\<langue>\\) : un fichier absent de son chemin se mesure là où le son le joue (lotrbfme.exe 0x4B3730)
+bool lengthMs(const AudioIniState &audio, AudioAssetCache &files, const std::string &name, std::int32_t &ms, bool &picked, const std::string &localizedPrefix = std::string());
 // a probe-only file cache over the mounted archives (no decoded budget)
 std::shared_ptr<AudioAssetCache> makeProbeCache(ArchiveFileSystem &fs);
 } // namespace ScriptAudioLength

@@ -420,9 +420,9 @@ void checkHelp(HoverRig &h, const CommandButtonHelp &help, const ControlBarButto
 	else if (b.m_command == GUI_COMMAND_SPECIAL_POWER && TheSpecialPowerStore)
 	{
 		const SpecialPowerTemplate *sp = TheSpecialPowerStore->findSpecialPowerTemplate(b.m_specialPowerName);
-		if (sp && sp->getFinalOverride()->m_unitCost != 0)
+		if (sp && sp->getFinalOverride()->getUnitCost() != 0)
 		{
-			cost = fmt1(h.label("TOOLTIP:UnitCost"), num(sp->getFinalOverride()->m_unitCost));
+			cost = fmt1(h.label("TOOLTIP:UnitCost"), num(sp->getFinalOverride()->getUnitCost()));
 		}
 	}
 	// the description this button has in this state, by the original's rules (RW 0x807A81) evaluated here from the data and the logic's state: the

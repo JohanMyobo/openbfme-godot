@@ -5,6 +5,8 @@
 #include "GodotDevice/GodotGammaComposite.h"
 #include "Common/PathIO.h"
 #include <godot_cpp/classes/shader.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -1328,6 +1330,7 @@ Dictionary GameWorld::load_internal(const LiveGame::Options &loIn, const String 
 		terrain->set_name("Terrain");
 		add_child(terrain);
 		m_terrainRenderDisabled = false; // un nouveau terrain se montre
+		W3D_Set_Model_Shroud(false, Ref<Texture2D>(), Vector2(), Vector2(1.0f, 1.0f));
 		report["terrain"] = trep;
 		timings["terrain_ms"] = timing::elapsedMs(t0);
 	}
@@ -2374,8 +2377,34 @@ void GameWorld::advance(double delta)
 		m_terrainRenderDisabled = !m_terrainRenderDisabled;
 		if (Node3D *chunks = Object::cast_to<Node3D>(get_node_or_null(NodePath("Terrain/Terrain"))))
 		{
-			chunks->set_visible(!m_terrainRenderDisabled);
+			// les décalques ne passent pas par ce maillage et restent visibles (ZH W3DProjectedShadow.cpp queueDecal) : ses morceaux ne montrent plus que le cercle de visée
+			if (m_terrainRenderDisabled && m_hiddenTerrainDecals.is_null())
+			{
+				Ref<Shader> shader = ResourceLoader::get_singleton()->load("res://shaders/terrain_hidden_decals.gdshader");
+				if (shader.is_null())
+				{
+					UtilityFunctions::push_error("GameWorld: res://shaders/terrain_hidden_decals.gdshader cannot be loaded: no aiming circle while the terrain is hidden");
+				}
+				else
+				{
+					m_hiddenTerrainDecals.instantiate();
+					m_hiddenTerrainDecals->set_shader(shader);
+				}
+			}
+			chunks->set_visible(!m_terrainRenderDisabled || m_hiddenTerrainDecals.is_valid());
+			for (int i = 0; i < chunks->get_child_count(); ++i)
+			{
+				if (MeshInstance3D *chunk = Object::cast_to<MeshInstance3D>(chunks->get_child(i)))
+				{
+					chunk->set_material_override(m_terrainRenderDisabled ? Ref<Material>(m_hiddenTerrainDecals) : Ref<Material>());
+				}
+			}
 		}
+		if (!m_terrainRenderDisabled)
+		{
+			W3D_Set_Model_Shroud(false, Ref<Texture2D>(), Vector2(), Vector2(1.0f, 1.0f)); // masqué : la mise à jour du brouillard donne la grille (update_shroud)
+		}
+		m_shroudVersionShown = (decltype(m_shroudVersionShown))-1; // force cette mise à jour à la prochaine image
 	}
 	{
 		// lane PERF-1: everything the main thread ran since the last advance (the whole previous render frame: scripts, this node, Godot's rendering)
@@ -4400,6 +4429,27 @@ Dictionary GameWorld::get_render_pose(int64_t id) const
 	}
 	d["instances"] = drawn;
 	d["fog_lit_instances"] = fogLit;
+	// notre version (relevé pour les sondes) : ce que chaque modèle du drawable joue
+	Array anims;
+	for (const DrawEntry &e : dr->entries())
+	{
+		if (!e.draw)
+		{
+			continue;
+		}
+		const W3DDrawFrame f = e.draw->frame();
+		if (f.trackCount > 0)
+		{
+			Dictionary a;
+			a["state"] = toGodot(f.animationStateName);
+			a["clip"] = toGodot(f.tracks[0].clipName);
+			a["frame"] = f.tracks[0].frame;
+			a["clip1"] = f.trackCount > 1 ? toGodot(f.tracks[1].clipName) : String();
+			a["animated"] = e.animated;
+			anims.push_back(a);
+		}
+	}
+	d["anims"] = anims;
 	return d;
 }
 
@@ -6300,8 +6350,8 @@ Dictionary GameWorld::get_spell_power_effect(int64_t player, const String &power
 		d["active"] = sc->active();
 	}
 	d["class"] = toGodot(cls);
-	d["initiate_sound"] = toGodot(t->m_initiateSound);
-	d["initiate_at_location_sound"] = toGodot(t->m_initiateAtLocationSound);
+	d["initiate_sound"] = toGodot(t->getInitiateSound());
+	d["initiate_at_location_sound"] = toGodot(t->getInitiateAtLocationSound());
 	d["triggers"] = (int64_t)m->triggers();
 	d["victims"] = (int64_t)m->victimsAffected();
 	d["applied"] = (int64_t)m->applied();
@@ -6513,6 +6563,10 @@ void GameWorld::refresh_shroud(bool force, double dtMs)
 	// lane VISUAL-2: the fogged light fraction, RW 0x46DFD0 / 0x46F533: (float) GlobalData + 0xBE9 (FogAlpha) / (float) + 0xBE8 (ClearAlpha); a ClearAlpha of 0
 	// divides by zero as retail's divss does
 	W3D_Set_Fogged_Light_Frac(SimMath::divf32((float)vs.fogAlpha, (float)vs.clearAlpha));
+	if (m_terrainRenderDisabled)
+	{
+		W3D_Set_Model_Shroud(m_shroudDrawn, m_shroudTexture, origin, extent); // notre version, BFME1
+	}
 	// lane BIGBATTLE-1: the materials keep what they were given and the texture above is updated in place, so the terrain's materials are
 	// visited only when a parameter's value changes (a new texture, the grid, the colour, shroud_enabled) or on force (the load, set_shroud_drawn). Walking
 	// the tree and setting five parameters on every material after each change of the shroud cost about 4 ms per logic frame in a big battle. The terrain's
@@ -7341,6 +7395,9 @@ Dictionary GameWorld::clear_game_data(bool show_score_screen)
 		return out;
 	}
 	m_scoreScreen = ScoreScreenData();
+	// notre version, BFME1 : le brouillard des modèles est une variable globale des matériaux W3D. Laissé allumé après la partie, il noircit tout modèle dessiné ensuite
+	// (la carte des actes hors des zones explorées de la mission finie)
+	W3D_Set_Model_Shroud(false, Ref<Texture2D>(), Vector2(), Vector2(1.0f, 1.0f));
 	if (show_score_screen)
 	{
 		// RW 0x927898: the screen's type by the game mode (2 skirmish, 3 LAN, 4 Internet); the players by game slot (RW 0x9275EC)

@@ -750,6 +750,13 @@ void ActCampaignLogic::enterAct(const CampaignAct &act, int depth)
 		}
 	}
 	auto schedule = [&](int delayMs, ActCommand command) {
+		// 0x7C2280 : un événement SummaryEvent va dans une autre file (+0x5C) que celle qui est jouée (+0x50) ; les deux ne s'échangent qu'au chargement d'une sauvegarde
+		// (0x7C1190, appelé par le xfer à 0x7C45E7) : c'est le résumé de l'acte quand on recharge. Il ne se joue donc pas en partie normale : les deux voix à 2 s de l'acte
+		// Two de la campagne du Bien se superposaient. Le résumé au chargement n'est pas porté
+		if (command.summaryEvent)
+		{
+			return;
+		}
 		m_timed.push_back({ m_frame + delayMs * FRAMES_PER_SECOND / 1000, std::move(command) });
 	};
 	for (const ActMoveCamera &camera : act.moveCameras)

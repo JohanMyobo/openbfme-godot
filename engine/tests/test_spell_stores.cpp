@@ -203,8 +203,8 @@ TEST_CASE("SPELL-1 SpecialPower: fields, ids, DefaultSpecialPower and duplicates
 	CHECK(p1->getRequiredSciences() == ScienceVec{ w.sci("A") });
 	CHECK(p1->getFlags() == (SPF_NEEDS_TARGET | SPF_LIMIT_DISTANCE));
 	CHECK(p1->isSharedNSync());
-	CHECK(p1->m_detectionTime == 50u);
-	CHECK(p1->m_preventActivationConditions != std::array<std::uint32_t, 4>{});
+	CHECK(p1->getDetectionTime() == 50u);
+	CHECK(p1->getPreventActivationConditions() != std::array<std::uint32_t, 4>{});
 	CHECK(s.findSpecialPowerTemplate("p1") == nullptr); // case-sensitive
 	CHECK(contains(w.load("SpecialPower P1\nEnd\n"), "Special power 'P1' already defined"));
 	CHECK(contains(w.load("SpecialPower P1\nEnd\n", INI_LOAD_RELOAD), "Special power 'P1' already defined"));
@@ -217,13 +217,26 @@ TEST_CASE("SPELL-1 SpecialPower: fields, ids, DefaultSpecialPower and duplicates
 	CHECK(p2->getReloadTime() == 5u);
 	CHECK(p2->getRadiusCursorRadius() == 9.0f);
 	CHECK(s.findSpecialPowerTemplate("P1")->getReloadTime() == 1200u);
-	// map.ini override keeps the id
+	// map.ini override keeps the id, and the pointer: a module keeps the entry it found while the data loaded, Object::getSpecialPowerModule compares that pointer
+	// (RW 0x8969D1) and the lookups return the entry (RW 0x7B1D71, 0x7B1AFB; ZH, lotrbfme 0x0EB6EA): only the values come from the final override
+	const SpecialPowerTemplate *entry = s.findSpecialPowerTemplate("P1");
 	REQUIRE(w.load("SpecialPower P1\n  ReloadTime = 2000\nEnd\n", INI_LOAD_CREATE_OVERRIDES) == "");
-	CHECK(s.findSpecialPowerTemplate("P1")->getReloadTime() == 10u);
-	CHECK(s.findSpecialPowerTemplate("P1")->getID() == 1u);
-	CHECK(s.findSpecialPowerTemplateByID(1)->getReloadTime() == 10u);
+	CHECK(s.findSpecialPowerTemplate("P1") == entry);
+	CHECK(s.findSpecialPowerTemplateByID(1) == entry);
+	CHECK(s.getSpecialPowerByIndex(0) == entry);
+	CHECK(entry->getFinalOverride() != entry);
+	CHECK(entry->getReloadTime() == 10u);
+	CHECK(entry->getID() == 1u);
+	CHECK(entry->isSharedNSync()); // the override copies its parent (RW 0x7B1E6C)
+	// a second override (solo.ini after map.ini) links on the final one and copies it (RW 0x7B2182, 0x7B21CE)
+	REQUIRE(w.load("SpecialPower P1\n  RadiusCursorRadius = 33\nEnd\n", INI_LOAD_CREATE_OVERRIDES) == "");
+	CHECK(s.findSpecialPowerTemplate("P1") == entry);
+	CHECK(entry->getReloadTime() == 10u);
+	CHECK(entry->getRadiusCursorRadius() == 33.0f);
 	w.stores.resetOverrides();
-	CHECK(s.findSpecialPowerTemplate("P1")->getReloadTime() == 1200u);
+	CHECK(s.findSpecialPowerTemplate("P1") == entry);
+	CHECK(entry->getReloadTime() == 1200u);
+	CHECK(entry->getRadiusCursorRadius() == 120.0f);
 	CHECK(w.load("SpecialPower P8\n  Enum = SPECIAL_NOT_A_THING\nEnd\n") != "");
 	CHECK(w.load("SpecialPower P7\n  RequiredSciences = Nope\nEnd\n") != "");
 }

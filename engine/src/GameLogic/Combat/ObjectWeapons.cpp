@@ -557,7 +557,10 @@ void ObjectWeapons::rebuildWeapons(const WeaponTemplateSet *set)
 	const std::uint32_t now = m_owner->logic().getFrame();
 	for (int i = 0; i < WEAPONSLOT_COUNT; ++i)
 	{
-		const WeaponTemplate *tmpl = set->m_template[i];
+		// RW 0x6C9ADC .. 0x6C9AEC (BFME1 0x5EBBC0 WeaponSet_updateWeaponSet.cpp, findWeaponTemplatePrivate) : le jeu d'armes ne donne que la clé du nom (+ 0xC) ; l'arme
+		// vient de l'entrée COURANTE du magasin, donc de la surcharge de map.ini quand il y en a une (l'épée du Balrog de la Moria : 75 au lieu de 800 + 1000).
+		// Un nom absent du magasin laisse le slot vide (RW 0x6C9AEC)
+		const WeaponTemplate *tmpl = set->m_template[i] && TheWeaponStore ? TheWeaponStore->findWeaponTemplate(set->m_template[i]->getName()) : nullptr;
 		if (!tmpl)
 		{
 			continue;

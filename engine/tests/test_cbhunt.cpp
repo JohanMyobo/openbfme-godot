@@ -30,6 +30,13 @@
 
 using namespace scripttest;
 
+// Une fiche de pouvoir fabriquée à la main, sans INI (ami de SpecialPowerTemplate)
+struct SpecialPowerTemplateTestAccess
+{
+	static int &type(SpecialPowerTemplate &t) { return t.m_type; }
+	static unsigned &id(SpecialPowerTemplate &t) { return t.m_id; }
+};
+
 namespace
 {
 const char kHunters[] = R"ini(
@@ -322,18 +329,18 @@ TEST_CASE("cbhunt: ActionManager::canDoSpecialPowerAtObject (RW 0x82D925): the g
 	const unsigned long long before = ActionManager::stats().objectTypeTests;
 	const unsigned long long before33 = ActionManager::stats().unportedObjectTypeTests[0x33];
 	SpecialPowerTemplate *knifeMutable = const_cast<SpecialPowerTemplate *>(knife);
-	const int savedType = knifeMutable->m_type;
-	knifeMutable->m_type = 0x33;
+	const int savedType = knifeMutable->getSpecialPowerType();
+	SpecialPowerTemplateTestAccess::type(*knifeMutable) = 0x33;
 	bool unported = false;
 	CHECK_FALSE(ActionManager::canDoSpecialPowerAtObject(*h, enemy, CMD_FROM_AI, knife, 0, true, &unported));
 	CHECK(unported);
 	CHECK(ActionManager::stats().objectTypeTests == before + 1);
 	CHECK(ActionManager::stats().unportedObjectTypeTests[0x33] == before33 + 1);
-	knifeMutable->m_type = 0x5; // a type without a case: no, not unported
+	SpecialPowerTemplateTestAccess::type(*knifeMutable) = 0x5; // a type without a case: no, not unported
 	unported = false;
 	CHECK_FALSE(ActionManager::canDoSpecialPowerAtObject(*h, enemy, CMD_FROM_AI, knife, 0, false, &unported));
 	CHECK_FALSE(unported);
-	knifeMutable->m_type = savedType;
+	SpecialPowerTemplateTestAccess::type(*knifeMutable) = savedType;
 	const std::vector<std::string> lines = ActionManager::stopLines();
 	REQUIRE(lines.size() == 5);
 	CHECK(lines[4].rfind("[S-7140]", 0) == 0);

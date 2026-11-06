@@ -94,6 +94,13 @@ InGameHud::InGameHud(Config config)
 		m_spellBar.cancel();
 		return true;
 	});
+	// FAIT CIBLE BFME1 (lotrbfme.exe 0x5B1C70) : le clic gauche annule le pouvoir du grimoire comme toute commande en attente (GUICommandTranslator)
+	m_input->guiCommandTranslator().setHudLeftCancel([this]() {
+		if (m_spellBar.targeting() && m_input->ui().getInputEnabled())
+		{
+			m_spellBar.cancel();
+		}
+	});
 	// lane OWNERFIX-1 r2: InGameUI's setRadiusCursorNone (the disable edge, RW 0x69B632): the aiming circle goes in that call, the pointer back to the arrow
 	m_input->ui().setRadiusCursorNoneHook([this]() {
 		m_radiusCursor.clear();
@@ -1006,7 +1013,8 @@ void InGameHud::updateRadiusCursor()
 		return unported ? InGameSpellBookModel::Target::UNPORTED : InGameSpellBookModel::Target::INVALID;
 	};
 	m_targetingCursor = true;
-	if (command->m_radiusCursor.empty())
+	// BFME1 : NONE est l'indice 0 de ses RadiusCursorType (lotrbfme.exe 0x12B6078), pas de cercle : le pointeur de la commande
+	if (command->m_radiusCursor.empty() || (command->m_radiusCursor == "NONE" && isBfme1Data(m_config.fs)))
 	{
 		// RW 0x6A3D2A .. 0x6A3D60: no radius template, use the command's
 		// valid/invalid pointer. The existing empty-name inference is S-4640.

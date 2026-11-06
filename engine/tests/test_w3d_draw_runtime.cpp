@@ -312,6 +312,40 @@ TEST_CASE("draw runtime: the per track stepping of every animation mode (RW 0x4B
 	}
 }
 
+TEST_CASE("draw runtime: a MANUAL track needs advancing while a blend leaves it (the summoned Balrog held on frame 0 of JUST_BUILT, RW 0x4BF560)")
+{
+	const std::string text =
+		std::string(kDefaultState) +
+		"IdleAnimationState\n" + anim("ABUNIT_IDLA") + "End\n"
+		"AnimationState = JUST_BUILT\n" + anim("ABUNIT_RUN", "MANUAL", "    AnimationBlendTime = 0\n") + "End\n"
+		"End\n";
+	Rig r({ { "ABUNIT_RUN", 31 }, { "ABUNIT_IDLA", 31 } }, text);
+	r.start();
+	CHECK(r.draw->needsAdvance()); // the idle loop
+	// AnimationBlendTime 0: the MANUAL animation replaces track 0 and holds its frame: nothing to advance
+	r.draw->setModelConditionFlags(flagsOf({ "JUST_BUILT" }));
+	W3DDrawFrame f = r.draw->frame();
+	REQUIRE(f.trackCount == 1);
+	CHECK(f.tracks[0].mode == W3D_ANIM_MODE_MANUAL);
+	CHECK_FALSE(r.draw->needsAdvance());
+	// the condition goes: the idle loop blends in over track 1, and only advance() ends the blend, whatever track 0's mode
+	r.draw->setModelConditionFlags(ModelConditionFlags());
+	f = r.draw->frame();
+	REQUIRE(f.trackCount == 2);
+	CHECK(f.tracks[0].mode == W3D_ANIM_MODE_MANUAL);
+	CHECK(f.blending);
+	CHECK(r.draw->needsAdvance());
+	r.draw->advance(100.0); // 3 frames of a default 5 frame blend
+	f = r.draw->frame();
+	CHECK(f.tracks[1].frame == doctest::Approx(3.0f).epsilon(0.001)); // tolerance: 100 ms convertis en images, en flottant
+	CHECK(f.blendPercentage == doctest::Approx(0.6f).epsilon(0.001)); // tolerance: comme au-dessus
+	r.draw->advance(100.0); // the blend ends: the loop is track 0
+	f = r.draw->frame();
+	REQUIRE(f.trackCount == 1);
+	CHECK(clipIs(f.tracks[0], "abunit_skl.ABUNIT_IDLA"));
+	CHECK(r.draw->needsAdvance());
+}
+
 TEST_CASE("draw runtime: the track queue (RW 0x4B55D5): replace the incoming track, finish a blend more than half done, no blend for 0, queue behind MustCompleteBlend")
 {
 	const std::string text =

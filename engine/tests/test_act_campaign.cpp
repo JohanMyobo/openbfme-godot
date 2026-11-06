@@ -9,6 +9,7 @@
 
 #include "GameEngineDevice/Win32Device/Common/Win32BIGFileSystem.h"
 #include "GameLogic/LivingWorld/ActCampaign.h"
+#include "GameClient/MapUtil.h"
 #include "GameLogic/NewGame/StartingBase.h"
 
 #include <algorithm>
@@ -392,6 +393,28 @@ TEST_CASE("act campaign retail: Gondor and Mordor read whole, act one enables Mo
 	CHECK(logic.enabledRegions().size() == 3);
 	CHECK(logic.errors().empty());
 
+	// notre version : un SummaryEvent va dans la file du résumé (0x7C2280, +0x5C), pas dans celle qui est jouée : à 2 s de l'acte Two, une seule voix
+	{
+		ActCampaignLogic fresh;
+		REQUIRE(fresh.start(stores, "GondorCampaign", &error));
+		REQUIRE(fresh.regionWon("Moria"));
+		fresh.takeCommands();
+		std::vector<std::string> sounds;
+		for (int i = 0; i < 90; ++i) // 3 s à 30 images par seconde, avant les voix restantes de l'acte One (à 16 s)
+		{
+			fresh.update();
+			for (const ActCommand &c : fresh.takeCommands())
+			{
+				if (c.type == ActCommand::AUDIO)
+				{
+					sounds.push_back(c.text);
+				}
+			}
+		}
+		CHECK(std::count(sounds.begin(), sounds.end(), "GoodRohanSkirmish1-2") == 1);
+		CHECK(std::count(sounds.begin(), sounds.end(), "GoodRohanSkirmish1-1") == 0);
+	}
+
 	// Tous les actes de bout en bout : aucune armée ni région ne manque dans les données
 	for (const char *name : { "GondorCampaign", "MordorCampaign" })
 	{
@@ -408,5 +431,32 @@ TEST_CASE("act campaign retail: Gondor and Mordor read whole, act one enables Mo
 			joined += e + "\n";
 		}
 		CHECK_MESSAGE(all.errors().empty(), joined);
+	}
+}
+
+TEST_CASE("act campaign retail: notre version, BFME1: the zones of a map are its PolygonTriggers, the scripts find them by name")
+{
+	const char *install = std::getenv("BFME1_INSTALL");
+	if (!install)
+	{
+		retailtest::printSkip("BFME1 maps (BFME1_INSTALL unset)");
+		return;
+	}
+	Win32BIGFileSystem fs;
+	std::string error;
+	auto archive = fs.openArchiveFile((std::filesystem::u8path(install) / "Maps.big").u8string(), &error);
+	REQUIRE_MESSAGE(archive, error);
+	fs.mountArchive(std::move(archive), "Maps.big", false);
+	std::vector<std::uint8_t> bytes;
+	REQUIRE_MESSAGE(fs.readFile("maps/map good moria/map good moria.map", bytes, &error), error);
+	MapReadOptions options;
+	options.bfme1 = true;
+	LoadedMap map;
+	REQUIRE_MESSAGE(MapReader::load(bytes, "map good moria.map", options, map, &error), error);
+	CHECK(map.chunks.hasTriggerAreas);
+	for (const char *name : { "Balins_Tomb_Trigger", "Dialog Encounter 05", "Dialog Encounter 28" })
+	{
+		// tolerance: un polygone compte au moins 3 points ; ce test vérifie que la zone est lue, pas son nombre exact de points
+		CHECK(std::any_of(map.chunks.triggerAreas.begin(), map.chunks.triggerAreas.end(), [&](const TriggerArea &t) { return t.name == name && t.points.size() >= 3; }));
 	}
 }

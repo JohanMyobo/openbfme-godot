@@ -527,6 +527,18 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 		}
 		return true;
 	}
+	if (name == "PLAYER_SET_OVERRIDE_RELATION_TO_TEAM")
+	{
+		// notre version, BFME1 (0x6F84C0, ScriptActions.cpp doPlayerSetOverrideRelationToTeam) : le joueur par la clé de son nom (0x43ADD7, 0x42F586), donc
+		// "<Local Player>" n'y désigne personne et l'action ne fait rien, puis l'équipe. La Moria rend ainsi Mordor ami de la Communauté pendant l'arrivée du Balrog
+		Player *p = logic.players().findPlayerWithName(param(a, 0).stringValue);
+		Team *t = ScriptConditions::team(engine, param(a, 1).stringValue);
+		if (p && t)
+		{
+			p->setTeamRelationship(t, (Relationship)param(a, 2).intValue);
+		}
+		return true;
+	}
 	if (name == "TEAM_REMOVE_ALL_OVERRIDE_RELATIONS")
 	{
 		if (Team *t = ScriptConditions::team(engine, param(a, 0).stringValue))
@@ -578,6 +590,19 @@ bool ScriptActions::executeUnitAction(ScriptEngine &engine, const ScriptActionRe
 		if (o && w)
 		{
 			o->teleportTo(&w->location, false); // RW 0x7BDC2D: RW 0x696E63(pos, 0) (lane BACKLOG4: the status 0x5A source and the path reset run)
+		}
+		return true;
+	}
+	if (name == "TEAM_TELEPORT_TO_WAYPOINT")
+	{
+		// notre version, BFME1 : comme UNIT_TELEPORT_TO_WAYPOINT, pour chaque membre (les vagues du tombeau de Balin). INFÉRENCE (S-5017), adresse à relever
+		const Waypoint *w = terrain ? terrain->findWaypointByName(param(a, 1).stringValue) : nullptr;
+		if (w)
+		{
+			for (Object *o : unitOrTeam(engine, param(a, 0).stringValue, true))
+			{
+				o->teleportTo(&w->location, false);
+			}
 		}
 		return true;
 	}

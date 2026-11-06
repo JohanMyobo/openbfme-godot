@@ -207,6 +207,18 @@ TEST_CASE("script2 team relationship overrides (RW 0x7C1416 / 0x7C4E89 / 0x7C14C
 	CHECK_FALSE(a->hasRelationshipOverrides());
 	CHECK(a->getRelationship(b) == before);
 
+	// notre version, BFME1 (0x6F84C0) : le joueur par la clé de son nom ; "<Local Player>" n'y désigne personne, comme dans la scène du Balrog de la Moria
+	Player *alice = a->getControllingPlayer();
+	REQUIRE(alice != nullptr);
+	const Relationship playerBefore = alice->getRelationship(b);
+	const Relationship other = playerBefore == ALLIES ? NEUTRAL : ALLIES;
+	run(f.g, act("PLAYER_SET_OVERRIDE_RELATION_TO_TEAM", { sp(11, "<Local Player>"), sp(3, "Bob/teamBob"), ip(19, other) }));
+	CHECK(alice->getRelationship(b) == playerBefore);
+	run(f.g, act("PLAYER_SET_OVERRIDE_RELATION_TO_TEAM", { sp(11, "Alice"), sp(3, "Bob/teamBob"), ip(19, other) }));
+	CHECK(alice->getRelationship(b) == other);
+	CHECK(a->getRelationship(b) == other); // sans surcharge de l'équipe, celle de son joueur compte
+	run(f.g, act("PLAYER_SET_OVERRIDE_RELATION_TO_TEAM", { sp(11, "Alice"), sp(3, "Bob/teamBob"), ip(19, playerBefore) }));
+
 	// COUNTER_MATH: 0 + 1 - 2 * 3 /; the counter is made, the other counter found (0 when absent)
 	run(f.g, act("COUNTER_MATH_VALUE", { sp(4, "c"), ip(57, 0), ip(0, 7) }));
 	run(f.g, act("COUNTER_MATH_VALUE", { sp(4, "c"), ip(57, 2), ip(0, 3) }));
@@ -231,6 +243,51 @@ TEST_CASE("script2 team relationship overrides (RW 0x7C1416 / 0x7C4E89 / 0x7C14C
 	run(f.g, act("TEAM_MERGE_INTO_TEAM", { sp(3, "Alice/teamAlice"), sp(3, "Bob/teamBob") }));
 	CHECK(w->getTeam() == b);
 	CHECK(a->getFirstMember() == nullptr);
+}
+
+// notre version, BFME1 : la scène du tombeau de Balin (Moria) attend le troll « hors de la salle » et l'équipe de la salle du trône « entièrement dehors »,
+// alors que le joueur a pu tuer l'un ou l'autre. lotrbfme 0x324AA0 et 0x324BD0, ZH ScriptConditions.cpp : ce sont des négations, vraies pour un mort.
+TEST_CASE("script2 NAMED_OUTSIDE_AREA (RW 0x7E72B2, lotrbfme 0x324AA0) and TEAM_OUTSIDE_AREA_ENTIRELY (lotrbfme 0x324BD0) are negations: true for a unit or a team that is gone")
+{
+	Fixture f;
+	Object &u = *f.u;
+	Object *t = f.g.lw.make("Tower", f.g.lw.teamOf("Alice"));
+	// la présence d'une équipe dans une zone se lit sur le suivi RW 0x69264D : une sortie n'est vue qu'au déplacement d'après, d'où les deux pas
+	auto place = [&](float ux, float uy, float tx, float ty) {
+		f.g.frame();
+		moveTo(u, ux, uy);
+		moveTo(*t, tx, ty);
+		f.g.frame();
+		moveTo(u, ux + 1.0f, uy + 1.0f);
+		moveTo(*t, tx + 1.0f, ty + 1.0f);
+	};
+	place(600.0f, 600.0f, 500.0f, 500.0f);
+	const ScriptCondition namedIn = cond("NAMED_INSIDE_AREA", { sp(14, "U"), sp(9, "Box") });
+	const ScriptCondition namedOut = cond("NAMED_OUTSIDE_AREA", { sp(14, "U"), sp(9, "Box") });
+	const ScriptCondition teamOut = cond("TEAM_OUTSIDE_AREA_ENTIRELY", { sp(3, "Alice/teamAlice"), sp(9, "Box"), ip(37, 0) });
+	CHECK(evalCond(f.g, namedOut));
+	CHECK(evalCond(f.g, teamOut));
+	place(10.0f, 10.0f, 500.0f, 500.0f);
+	CHECK(evalCond(f.g, namedIn));
+	CHECK_FALSE(evalCond(f.g, namedOut));
+	CHECK_FALSE(evalCond(f.g, teamOut)); // un membre dedans, un dehors
+	place(10.0f, 10.0f, 20.0f, 20.0f);
+	CHECK_FALSE(evalCond(f.g, teamOut)); // tous les membres dedans
+	place(600.0f, 600.0f, 500.0f, 500.0f);
+	CHECK(evalCond(f.g, teamOut));
+
+	// une unité nommée inconnue : ni dedans, donc dehors
+	CHECK_FALSE(evalCond(f.g, cond("NAMED_INSIDE_AREA", { sp(14, "NoSuchUnit"), sp(9, "Box") })));
+	CHECK(evalCond(f.g, cond("NAMED_OUTSIDE_AREA", { sp(14, "NoSuchUnit"), sp(9, "Box") })));
+	// une équipe inconnue : ni dedans, donc dehors
+	CHECK(evalCond(f.g, cond("TEAM_OUTSIDE_AREA_ENTIRELY", { sp(3, "Alice/NoSuchTeam"), sp(9, "Box"), ip(37, 0) })));
+
+	// l'équipe détruite, dans la zone au moment de mourir : dehors, sans plus aucun membre compté
+	place(10.0f, 10.0f, 20.0f, 20.0f);
+	CHECK_FALSE(evalCond(f.g, teamOut));
+	u.kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
+	t->kill(DAMAGE_UNRESISTABLE, DEATH_NORMAL);
+	CHECK(evalCond(f.g, teamOut));
 }
 
 TEST_CASE("script2 area and count conditions: TEAM_INSIDE_AREA_PARTIALLY (RW 0x7E6A5A), PLAYER_HAS_COMPARISON_UNIT_TYPE_IN_TRIGGER_AREA[_COMPLETELY_BUILT] (RW 0x7E6D81), "

@@ -508,6 +508,79 @@ TEST_CASE("summon1 OCL: a created structure owns its footprint at its final plac
 	CHECK_FALSE(cell->getType() == PathfindCell::CELL_OBSTACLE);
 }
 
+namespace
+{
+// notre version : note les fondus demandés au client (la fixture n'a pas de drawables)
+struct OclFadeHooks : ObjectClientHooks
+{
+	std::vector<std::pair<ObjectID, UnsignedInt>> in, out;
+	void objectCreated(Object &) override {}
+	void objectDestroyed(Object &) override {}
+	void fadeIn(Object &obj, UnsignedInt frames) override { in.emplace_back(obj.getID(), frames); }
+	void fadeOut(Object &obj, UnsignedInt frames) override { out.emplace_back(obj.getID(), frames); }
+};
+} // namespace
+
+// notre version : RW 0x5F1678 .. 0x5F17B7 (le Balrog invoqué d'OCL_BalrogSummoningFinish : FadeIn = Yes, FadeTime = 10000). FadeTime est une durée (5 images par seconde)
+TEST_CASE("summon1 OCL: FadeIn and FadeOut reach the client over FadeTime; a horde hands its FadeIn to its members (RW 0x5F1678 .. 0x5F17B7)")
+{
+	OCLWorld f(
+		"ObjectCreationList OCL_FadeIn\n CreateObject\n ObjectNames = Swordsman\n FadeIn = Yes\n FadeTime = 2000\n End\nEnd\n"
+		"ObjectCreationList OCL_FadeOut\n CreateObject\n ObjectNames = Swordsman\n FadeOut = Yes\n FadeTime = 1000\n End\nEnd\n"
+		"ObjectCreationList OCL_FadeHorde\n CreateObject\n ObjectNames = SwordHorde\n FadeIn = Yes\n FadeTime = 2000\n End\nEnd\n"
+		"ObjectCreationList OCL_NoFade\n CreateObject\n ObjectNames = Swordsman\n End\nEnd\n");
+	Object *source = f.unit("Swordsman", 'A', 200, 200);
+	OclFadeHooks hooks;
+	ObjectClientHooks *before = f.logic->clientHooks();
+	f.logic->setClientHooks(&hooks);
+	const Coord3D at{ 500, 500, 0 };
+
+	SUBCASE("no fade asked: the client hears nothing")
+	{
+		REQUIRE(f.list("OCL_NoFade").create(*f.logic, source, at, nullptr).size() == 1);
+		CHECK(hooks.in.empty());
+		CHECK(hooks.out.empty());
+	}
+	SUBCASE("FadeIn: the created object, for 10 frames")
+	{
+		const auto made = f.list("OCL_FadeIn").create(*f.logic, source, at, nullptr);
+		REQUIRE(made.size() == 1);
+		REQUIRE(hooks.in.size() == 1);
+		CHECK(hooks.in[0].first == made[0]->getID());
+		CHECK(hooks.in[0].second == 10u);
+		CHECK(hooks.out.empty());
+	}
+	SUBCASE("FadeOut: the created object, for 5 frames")
+	{
+		const auto made = f.list("OCL_FadeOut").create(*f.logic, source, at, nullptr);
+		REQUIRE(made.size() == 1);
+		REQUIRE(hooks.out.size() == 1);
+		CHECK(hooks.out[0].first == made[0]->getID());
+		CHECK(hooks.out[0].second == 5u);
+		CHECK(hooks.in.empty());
+	}
+	SUBCASE("a horde has no body of its own: each member fades in, not the horde (RW 0x5F16C4)")
+	{
+		const auto made = f.list("OCL_FadeHorde").create(*f.logic, source, at, nullptr);
+		REQUIRE(made.size() == 1);
+		ContainModuleInterface *contain = made[0]->getContain();
+		REQUIRE(contain);
+		const ContainModuleInterface::ContainedItemsList *members = contain->getContainedItemsList();
+		REQUIRE(members);
+		REQUIRE(members->size() == 6); // SwordHorde : InitialPayload = Swordsman 6, créés par l'OCL lui-même (RW 0x5F1623) avant le fondu
+		REQUIRE(hooks.in.size() == members->size());
+		size_t i = 0;
+		for (Object *member : *members)
+		{
+			CHECK(hooks.in[i].first == member->getID());
+			CHECK(hooks.in[i].first != made[0]->getID());
+			CHECK(hooks.in[i].second == 10u);
+			++i;
+		}
+	}
+	f.logic->setClientHooks(before);
+}
+
 // RW 0xBF6E50 / 0xBF74F8: DispositionIntensity is a velocity (RW 0x73A4B6: per second * 0.2), the angles degrees (RW 0x42EE15), the lifetimes durations
 // (RW 0x73A429: 5 frames a second), the health a percent (RW 0x42EEFA); the defaults are RW 0x5F0689's
 TEST_CASE("summon1 OCL: the CreateObject rows parse with the binary's parsers and defaults (RW 0xBF6E50 / 0xBF74F8)")

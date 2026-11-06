@@ -460,7 +460,7 @@ TEST_CASE("decomp3 S-418: the object events of an INERT object, a CommandSetUpgr
 		for (const std::unique_ptr<BehaviorModule> &m : hero->modules())
 		{
 			const SpecialPowerModule *sp = dynamic_cast<const SpecialPowerModule *>(m.get());
-			if (sp && sp->getSpecialPowerTemplate() && sp->getSpecialPowerTemplate()->m_type == 0x1D)
+			if (sp && sp->getSpecialPowerTemplate() && sp->getSpecialPowerTemplate()->getSpecialPowerType() == 0x1D)
 			{
 				capture = sp;
 			}

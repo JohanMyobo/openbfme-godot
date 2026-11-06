@@ -472,6 +472,12 @@ unsigned AudioEventRTS::getSoundClass() const
 	}
 }
 
+std::string AudioEventLocalizedFile(const AudioSettings &settings, const AudioEventInfo &info, const std::string &file, const std::string &localizedPrefix)
+{
+	const size_t sep = file.find_last_of('\\');
+	return sep == std::string::npos ? file : localizedPrefix + folderFor(settings, info.soundType) + file.substr(sep + 1);
+}
+
 std::vector<std::string> AudioEventFiles(const AudioSettings &settings, const AudioEventInfo &info)
 {
 	std::vector<std::string> files;

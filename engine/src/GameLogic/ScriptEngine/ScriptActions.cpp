@@ -52,7 +52,7 @@ const std::set<int> &clientActions()
 	static const std::set<int> s = [] {
 		static const char *const names[] = {
 			"MOVE_CAMERA_TO", "MOVE_CAMERA_ALONG_WAYPOINT_PATH", "MOVE_CAMERA_ALONG_SPLINE_PATH", "MOVE_CAMERA_LOCATOR_ALONG_SPLINE_PATH",
-			"ROTATE_CAMERA", "RESET_CAMERA", "ZOOM_CAMERA", "PITCH_CAMERA", "ROLL_CAMERA", "ROTATE_CAMERA_LOCKED", "CAMERA_FOLLOW_NAMED",
+			"ROTATE_CAMERA", "ROTATE_CAMERA_TO_ANGLE", "RESET_CAMERA", "ZOOM_CAMERA", "PITCH_CAMERA", "ROLL_CAMERA", "ROTATE_CAMERA_LOCKED", "CAMERA_FOLLOW_NAMED",
 			"CAMERA_STOP_FOLLOW", "CAMERA_LOOK_TOWARD_OBJECT", "CAMERA_LOOK_TOWARD_WAYPOINT", "CAMERA_MOD_SET_FINAL_ZOOM", "CAMERA_MOD_SET_FINAL_PITCH",
 			"CAMERA_MOD_FREEZE_TIME", "CAMERA_MOD_FREEZE_ANGLE", "CAMERA_MOD_FINAL_LOOK_TOWARD", "CAMERA_MOD_LOOK_TOWARD", "CAMERA_MOD_SET_ROLLING_AVERAGE",
 			"CAMERA_MOD_FINAL_SPEED_MULTIPLIER", "CAMERA_MOD_FINAL_TIME_MULTIPLIER", "CAMERA_LETTERBOX_BEGIN", "CAMERA_LETTERBOX_END", "CAMERA_BW_MODE_BEGIN",
@@ -65,7 +65,8 @@ const std::set<int> &clientActions()
 			"PLAY_SOUND_EFFECT", "PLAY_SOUND_EFFECT_AT", "PLAY_SOUND_EFFECT_AT_TEAM", "SOUND_PLAY_NAMED", "SPEECH_PLAY", "MUSIC_SET_TRACK",
 			"MUSIC_SET_VOLUME", "SOUND_SET_VOLUME", "SPEECH_SET_VOLUME", // lane SCRIPT-3: RW 0x7BCAAE (TheAudio's script volume, client)
 			"REFRESH_RADAR", // lane BFME2CAMP1: RW 0x7BCC53: TheRadar (RW 0xDE4AB8) vslot 0x10(TheTerrainLogic), the client's radar redraw
-			"MUSIC_PLAY_TRACK_FINITE_TIMES", "MOVIE_PLAY_FULLSCREEN", "MOVIE_PLAY_RADAR", "PLAY_MOVIE_IN_GAME", "DISABLE_INPUT", "ENABLE_INPUT",
+			"MUSIC_PLAY_TRACK_FINITE_TIMES", "AUDIO_PUSH_MUSIC", "AUDIO_POP_MUSIC", "MUSIC_PUSH_TRACK_FINITE_TIMES", "MUSIC_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY", // notre version, BFME1 : la pile de musique (LiveGameAudio)
+			"MOVIE_PLAY_FULLSCREEN", "MOVIE_PLAY_RADAR", "PLAY_MOVIE_IN_GAME", "DISABLE_INPUT", "ENABLE_INPUT",
 			"HIDE_UI", "SHOW_UI", "DESELECT", "SELECT_OBJECT", "EVA_SET_ENABLED_DISABLED", "AUDIO_MAKE_SOUND_IMMUNE_TO_FADE", "AUDIO_FADE_VOLUME",
 			"AUDIO_RESTORE_VOLUME_ALL_TYPE", "AUDIO_OVERRIDE_VOLUME_TYPE", "AUDIO_RESTORE_VOLUME_TYPE", "AUDIO_SET_VOLUME_TYPE", "CAMEO_FLASH",
 			"NAMED_FLASH", "TEAM_FLASH", "ENABLE_HOUSE_COLOR", "DRAW_SKYBOX_BEGIN", "DRAW_SKYBOX_END", "SUSPEND_BACKGROUND_SOUNDS",
@@ -299,6 +300,10 @@ void ScriptActions::clientRequest(ScriptEngine &engine, const ScriptActionRec &a
 	ScriptClientRequest r;
 	r.action = ScriptTemplates::action(a.resolved)->name;
 	r.params = a.params;
+	if (r.action == "MUSIC_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY" && a.params.size() == 5)
+	{
+		engine.scheduleMusicNotify(a.params[0].stringValue, a.params[1].intValue, a.params[4].stringValue);
+	}
 	if (r.action == "HERO_SELECT_BUTTON_FLASH")
 	{
 		if (a.params.size() != 2)
@@ -396,6 +401,12 @@ void ScriptActions::execute(ScriptEngine &engine, const ScriptActionRec &a)
 	if (isClientAction(a.resolved))
 	{
 		clientRequest(engine, a);
+		// notre version, BFME1 : ScriptActions::doVictory (décompilé open-bfme-1, GameLogic/ScriptEngine/ScriptActions.cpp) : l'écran de victoire d'une mission,
+		// sans mettre fin à la partie : la mission se termine plus tard, par QUICKVICTORY. La bannière passe par la fin de partie du client (EndGameView)
+		if (t->name == "VICTORY_SCREEN")
+		{
+			engine.addVictoryScreenRequest();
+		}
 		return;
 	}
 	GameLogic &logic = engine.logic();

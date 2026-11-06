@@ -680,7 +680,29 @@ TEST_CASE("synthetic HUD: click replaces selection, Shift adds and toggles")
 	r.click(500, 500); r.selected({});
 }
 
-TEST_CASE("synthetic HUD: notre version, BFME1: with the alternate mouse the right click carries out a waiting power, the left click leaves it (lotrbfme.exe 0x9B0690, 0x9B0805, 0x9B916E)")
+TEST_CASE("synthetic HUD: notre version: a translator hook that sends a message and flushes stays in the running pass (the crash of a BFME1 spell book right click)")
+{
+	synthetichud::Rig r;
+	r.input->commandTranslator().setBfme1ClickRoles(true);
+	size_t calls = 0;
+	size_t flushed = 1;
+	const size_t logBefore = r.input->stream().log().size();
+	r.input->guiCommandTranslator().setHudTargetCancel([&](const ICoord2D &) {
+		++calls;
+		GameMessage m(MSG_DO_STOP, 0); // comme InGameHud::send : le message, puis la passe
+		r.input->submit(m);
+		flushed = r.input->flush(); // imbriquée : elle ne touche pas à la liste de la passe en cours
+		return true;
+	});
+	r.click(300, 300, HudInput::Button::Right);
+	CHECK(calls == 1);
+	CHECK(flushed == 0);
+	REQUIRE(r.input->stream().log().size() == logBefore + 1); // le message est passé, une seule fois, par la passe en cours
+	CHECK(r.input->stream().log().back().find("MSG_DO_STOP") != std::string::npos);
+	r.input->guiCommandTranslator().setHudTargetCancel(nullptr);
+}
+
+TEST_CASE("synthetic HUD: notre version, BFME1: with the alternate mouse the right click carries out a waiting power, the left click ends it (lotrbfme.exe 0x9B0690, 0x5B1C70, 0x9B916E)")
 {
 	synthetichud::Rig r; // la souris alternée, celle par défaut
 	Object *a = r.place("TestFighter", 100, 100);
@@ -705,12 +727,21 @@ TEST_CASE("synthetic HUD: notre version, BFME1: with the alternate mouse the rig
 		CHECK(r.input->ui().getGUICommand() == &power);
 		r.selected({ a->getID() });
 	}
-	SUBCASE("BFME1 : the left click does not reach the waiting power")
+	SUBCASE("BFME1 (lotrbfme 0x5B1C70): the left click ends the waiting power and orders nothing")
 	{
 		r.input->commandTranslator().setBfme1ClickRoles(true);
 		r.click(300, 300);
 		CHECK(r.input->commandTranslator().clickOutcomes().at("other-button") == 1);
-		CHECK(r.commands.messages().size() == 0u);
+		CHECK(r.input->ui().getGUICommand() == nullptr);
+		for (const auto &m : r.commands.messages())
+		{
+			CHECK(m.getType() != MSG_DO_SPECIAL_POWER_AT_LOCATION);
+		}
+	}
+	SUBCASE("BFME1 (lotrbfme 0x5B1C70): a dragged left click leaves the power waiting")
+	{
+		r.input->commandTranslator().setBfme1ClickRoles(true);
+		r.drag(300, 300, 400, 400);
 		CHECK(r.input->ui().getGUICommand() == &power);
 	}
 	SUBCASE("BFME1 with the standard mouse keeps the left click for the target")

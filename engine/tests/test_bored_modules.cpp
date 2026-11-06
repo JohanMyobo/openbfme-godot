@@ -236,7 +236,7 @@ TEST_CASE("bored1: an idle Mountain Troll clubs its troll friend (RW 0x82D925 / 
 			}
 		}
 		MESSAGE("bored power: ready " << sp->getPercentReady() << ", requirements " << sp->requirementsMet() << ", drivers " << drivers << " allow " << driverAllows
-		                              << ", relationship " << (int)a->getRelationship(*b) << ", unit cost " << power->m_unitCost << "; MOUNTED "
+		                              << ", relationship " << (int)a->getRelationship(*b) << ", unit cost " << power->getUnitCost() << "; MOUNTED "
 		                              << a->testModelCondition(0xD6) << " WEAPONSET_TOGGLE_1 " << a->testModelCondition(0x12D) << " MOVING " << a->testModelCondition(0x3D));
 	}
 	CHECK(ActionManager::canDoSpecialPowerAtObject(*a, b, CMD_FROM_AI, ma->data()->m_specialPowerTemplate, 2u, true)); // type 0x40: yes (RW 0x82DAE9)

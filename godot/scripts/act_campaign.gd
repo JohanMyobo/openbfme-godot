@@ -608,10 +608,42 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_WHEEL_DOWN:
 				cam_dist = minf(cam_dist * 1.1, 4000.0)
 			MOUSE_BUTTON_LEFT:
+				if _select_army_at(event.position):
+					return
 				var r := _pick_region(event.position)
 				print("ACTMAP click at %s: region '%s', playable %s" % [str(event.position), r, str(not r.is_empty() and acts.can_enter_region(r))])
 				if not r.is_empty() and acts.can_enter_region(r):
 					_open_popup(r)
+
+
+## notre version, BFME1 (provisoire, S-5017 : l'interface LivingWorldUI n'est pas portée) : un clic près de l'icône d'une armée la sélectionne et l'annonce ;
+## la marche choisie par le joueur n'existe pas encore : la région jouable s'ouvre d'un clic, comme sans sélection.
+const ARMY_PICK_PX := 90.0
+var _army_label: Label
+
+func _select_army_at(screen: Vector2) -> bool:
+	var best := ""
+	var best_d := ARMY_PICK_PX
+	for name in _icons.keys():
+		var p: Vector3 = _icons[name].position
+		if camera.is_position_behind(p):
+			continue
+		var d := camera.unproject_position(p).distance_to(screen)
+		if d < best_d:
+			best_d = d
+			best = String(name)
+	if best.is_empty():
+		return false
+	print("ACTMAP army selected: %s" % best)
+	if _army_label == null:
+		_army_label = Label.new()
+		_army_label.set_meta("game_text", true)
+		_army_label.add_theme_font_size_override("font_size", 22)
+		_ui.add_child(_army_label)
+	_army_label.text = "%s : cliquez sur la région en surbrillance" % best
+	_army_label.position = Vector2(24.0, 24.0)
+	get_viewport().set_input_as_handled()
+	return true
 
 
 func _open_popup(region: String) -> void:

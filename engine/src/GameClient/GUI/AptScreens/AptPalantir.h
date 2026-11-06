@@ -79,6 +79,8 @@ public:
 	};
 	const NativeImage *imageFor(const std::string &key) const;
 	float timerFor(const std::string &key) const; // 0..1, -1 for no timer
+	// notre version, BFME1 : le minuteur d'un bouton SpellBookUI.Spell<n> se trouve par le chemin de son clip (lotrbfme.exe 0x99791A : « SpellBookUI/Spell%d/Timer »)
+	float timerForClip(const std::string &clipPath, const std::string &timerId) const;
 	// the paths of the content clips by key, for the report
 	const std::map<std::string, NativeImage> &images() const { return m_images; }
 	// the local player's side (good / evil): the frame, the faction icon and the radar of the movie follow it (SetPalantirFrameState, SetPlayerFaction)
@@ -196,6 +198,8 @@ public:
 		SPELL_VISUALLY_ENABLED = 6
 	};
 	static constexpr int kSpellSlots = 24;
+	static constexpr int kBfme1SpellSlots = 12;   ///< FAIT CIBLE BFME1 (lotrbfme.exe 0x997A77 : cmp eax, 0xC) : Palantir.apt porte Spell1 .. Spell12
+	static constexpr int kBfme1SpellButtons = 20; ///< FAIT CIBLE BFME1 (lotrbfme.exe 0x997C9E : cmp esi, 0x14) : les boutons lus dans le jeu de commandes du grimoire
 	struct SpellSlot
 	{
 		std::string image;    ///< the button's MappedImage
@@ -313,6 +317,9 @@ private:
 	int m_spellState[kSpellSlots] = {};
 	int m_spellButton[kSpellSlots] = {};
 	std::string m_spellImage[kSpellSlots];
+	bool m_spellWasUsable[kBfme1SpellButtons] = {}; ///< notre version, BFME1 (lotrbfme.exe, le tableau + 8 de 0x997790, à vrai au départ) : par bouton du jeu de commandes, pour l'éclat d'un pouvoir qui vient de s'ouvrir
+	void syncSpellBookBfme1(const std::vector<SpellSlot> &slots); ///< lotrbfme.exe 0x997A30
+	int bfme1SpellSlotOfClip(const std::string &clipPath) const;  ///< l'indice du bouton SpellBookUI.Spell<n> qui contient ce clip, -1 sinon
 	std::map<std::string, NativeImage> m_images;
 	std::map<std::string, float> m_timers;
 	Slot m_arc[kArcPositions], m_side[kSidePositions];

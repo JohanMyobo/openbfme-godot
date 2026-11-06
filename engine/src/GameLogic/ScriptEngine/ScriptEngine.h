@@ -289,6 +289,9 @@ public:
 		std::string script; // le script qui l'a demandée (le rapport des tests)
 	};
 	const std::vector<EndRequest> &endRequests() const { return m_endRequests; }
+	// notre version, BFME1 : le nombre d'actions VICTORY_SCREEN exécutées (doVictory : la bannière de victoire, pas la fin de la partie)
+	void addVictoryScreenRequest() { ++m_victoryScreenRequests; }
+	unsigned victoryScreenRequests() const { return m_victoryScreenRequests; }
 	void addEndRequest(bool victory, const std::string &action);
 
 	struct Stats
@@ -418,6 +421,9 @@ public:
 	// RW 0x759B84(name, consume): the first query starts the timer (the event's length in logic frames from now); true once the frame reached it,
 	// and the entry removed when `consume`. An event without info is finished at once (no entry)
 	bool hasFinishedAudio(const std::string &name, bool consume);
+	// notre version, BFME1 : MUSIC_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY : le drapeau se lève quand la piste a fini ses `count` passages. INFÉRENCE (S-5017) : sa durée vient
+	// du modèle de HAS_FINISHED_AUDIO, comptée depuis la demande. L'échéance vit dans la liste de timers (sauvegardée), sous un nom qu'aucun son ne porte
+	void scheduleMusicNotify(const std::string &track, int count, const std::string &flagName);
 	// lane SCRIPT-3: RW + 0x1A218, the team "<This Team>" names (RW 0x759FDA) while a sequential script's action runs (RW 0x60C674); 0 none
 	std::uint32_t conditionTeam() const { return m_conditionTeam; }
 	// lane CAMP-1H: RW + 0x1A210, the team of a team script ("<This Team>" asks it first, RW 0x759FDA): set by runScript (RW 0x60BD42) around the script,
@@ -487,6 +493,7 @@ private:
 	// the engine's counter / flag / timer conditions and actions (RW 0x608B28 ...)
 	bool evaluateCounter(const ScriptCondition &c);
 	bool evaluateFlag(const ScriptCondition &c);
+	void updateMusicNotifies(); // notre version, voir scheduleMusicNotify
 	bool evaluateTimer(const ScriptCondition &c);
 	void setTimer(const ScriptActionRec &a, bool milliseconds, bool random);
 	void setCounter(const ScriptActionRec &a, int randomMode, bool fromCounter, bool seconds);
@@ -526,6 +533,7 @@ private:
 	int m_callDepth = 0;
 	std::vector<ScriptClientRequest> m_clientRequests;
 	std::vector<EndRequest> m_endRequests;
+	unsigned m_victoryScreenRequests = 0;
 	bool m_updatingSequential = false; ///< updateSequentialScripts is running: removals empty slots instead of erasing them (not state)
 	std::vector<std::vector<SequentialScript>> m_sequential; ///< lane SCRIPT-2: RW + 0x10 (a chain per slot; an empty chain is retail's null slot)
 	std::array<AcquiredScienceQueue, 20> m_acquiredSciences; ///< lane AUDIO-4: + 0x1A3A8, one per player index (RW 0x759646 bound 0x14)

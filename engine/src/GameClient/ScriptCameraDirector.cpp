@@ -118,6 +118,30 @@ void ScriptCameraDirector::apply(const ScriptClientRequest &r, const Coord3D &ca
 		m_angle = m_rotate.from;
 		return;
 	}
+	if (a == "ROTATE_CAMERA_TO_ANGLE")
+	{
+		// notre version, BFME1 (angle en degrés, secondes, ease in, ease out). INFÉRENCE (S-5017) : le plus court chemin vers l'angle
+		const float seconds = realParam(r, 1);
+		const float from = m_rotate.active ? m_angle : cameraAngle;
+		float delta = realParam(r, 0) * kPi / 180.0f - from;
+		while (delta > kPi)
+		{
+			delta -= 2.0f * kPi;
+		}
+		while (delta < -kPi)
+		{
+			delta += 2.0f * kPi;
+		}
+		m_rotate.active = true;
+		m_rotate.from = from;
+		m_rotate.to = from + delta;
+		m_rotate.ms = seconds * 1000.0 < 1.0 ? 1.0 : seconds * 1000.0;
+		m_rotate.elapsed = 0.0;
+		m_rotate.ease.setEaseTimes((float)(realParam(r, 2) * 1000.0 / m_rotate.ms), (float)(realParam(r, 3) * 1000.0 / m_rotate.ms));
+		m_hasAngle = true;
+		m_angle = m_rotate.from;
+		return;
+	}
 	if (a == "CAMERA_LETTERBOX_BEGIN")
 	{
 		m_letterbox = true;

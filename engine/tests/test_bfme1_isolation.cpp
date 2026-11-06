@@ -2,6 +2,7 @@
 // community PR #36 review (docs/BFME1.md, Common/BfmeGame.h): BFME1 support is isolated. BFME1's extra INI rows and names are read only from BFME1
 // data (its SubsystemLegend.ini without BFME2's SubsystemLegendExpansion1.ini); RotWK / BFME2 data still fail on them exactly as the binary does.
 
+#include "GameClient/RadiusCursor.h"
 #include "doctest.h"
 
 #include "IniTestUtil.h"
@@ -48,6 +49,13 @@ namespace ModelCondition
 {
 int indexOf(const std::string &name);
 }
+
+// Une fiche de pouvoir fabriquée à la main, sans INI (ami de SpecialPowerTemplate)
+struct SpecialPowerTemplateTestAccess
+{
+	static int &type(SpecialPowerTemplate &t) { return t.m_type; }
+	static unsigned &id(SpecialPowerTemplate &t) { return t.m_id; }
+};
 
 namespace
 {
@@ -139,10 +147,10 @@ struct Bfme1PickupWorld : Bfme1ModuleWorld
 	std::vector<PickupCall> calls;
 	Bfme1PickupWorld()
 	{
-		grab.m_type = 0x27;
-		bored.m_type = 0x40; // SPECIAL_MTTROLL_BORED's shared name ordinal (BFME1 binary: 0x41)
-		grab.m_id = 1;
-		bored.m_id = 2;
+		SpecialPowerTemplateTestAccess::type(grab) = 0x27;
+		SpecialPowerTemplateTestAccess::type(bored) = 0x40; // SPECIAL_MTTROLL_BORED's shared name ordinal (BFME1 binary: 0x41)
+		SpecialPowerTemplateTestAccess::id(grab) = 1;
+		SpecialPowerTemplateTestAccess::id(bored) = 2;
 		world.modules.bindDataProc("SpecialPowerModule", MODULETYPE_BEHAVIOR, [this](INI *ini) -> std::shared_ptr<ModuleData> {
 			auto data = std::make_shared<SpecialPowerModuleData>();
 			const FieldParse fields[] = {
@@ -659,15 +667,9 @@ TEST_CASE("bfme1 isolation: BFME2 and RotWK still validate Living World fields")
 	}
 }
 
-TEST_CASE("bfme1 isolation retail: installed BFME1 object world loads without aborted files")
+// Les archives de BFME1, dans l'ordre du jeu, comme les monte le lanceur
+static void mountBfme1Install(Win32BIGFileSystem &fs, const std::filesystem::path &root)
 {
-	const char *install = std::getenv("BFME1_INSTALL");
-	if (!install || !*install)
-	{
-		retailtest::printSkip("BFME1 object loading (BFME1_INSTALL unset)");
-		return;
-	}
-	const std::filesystem::path root = std::filesystem::u8path(install);
 	std::vector<std::string> names;
 	for (const auto &entry : std::filesystem::recursive_directory_iterator(root))
 	{
@@ -679,7 +681,6 @@ TEST_CASE("bfme1 isolation retail: installed BFME1 object world loads without ab
 		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char value) { return std::tolower(value); });
 		if (extension == ".big") names.push_back(entry.path().lexically_relative(root).u8string());
 	}
-	Win32BIGFileSystem fs;
 	std::string error;
 	for (const auto &name : BFMEArchiveLoadOrder(names))
 	{
@@ -687,6 +688,97 @@ TEST_CASE("bfme1 isolation retail: installed BFME1 object world loads without ab
 		REQUIRE_MESSAGE(archive, error);
 		fs.mountArchive(std::move(archive), name, false);
 	}
+}
+
+TEST_CASE("bfme1 isolation retail: Moria's map.ini overrides Gandalf's lightning sword, the button still finds the template of his module (lotrbfme 0x0EBA20, 0x1BF410)")
+{
+	const char *install = std::getenv("BFME1_INSTALL");
+	if (!install || !*install)
+	{
+		retailtest::printSkip("BFME1 object loading (BFME1_INSTALL unset)");
+		return;
+	}
+	Win32BIGFileSystem fs;
+	mountBfme1Install(fs, std::filesystem::u8path(install));
+	std::string error;
+	RetailObjectWorld world(fs);
+	REQUIRE_MESSAGE(world.load(&error), error);
+	const RetailObjectWorld::MapIniResult mapIni = world.applyMapIni("maps\\map good moria");
+	CHECK(mapIni.mapIniFound);
+	for (const std::string &failure : mapIni.errors)
+	{
+		CHECK_MESSAGE(false, failure);
+	}
+	const auto context = world.enterContext();
+	const SpecialPowerTemplate *sword = TheSpecialPowerStore->findSpecialPowerTemplate("SpecialAbilityLightningSword");
+	REQUIRE(sword);
+	CHECK(sword->getFinalOverride() != sword);
+	CHECK(sword->getReloadTime() == 100u); // map.ini : ReloadTime = 20000 ms, à 5 images par seconde
+	CHECK(sword->getRadiusCursorRadius() == 120.0f);
+	const ThingTemplate *gandalf = world.things().findTemplate("GondorGandalf");
+	REQUIRE(gandalf);
+	int modules = 0;
+	for (const ThingTemplate::Nugget &n : gandalf->getFinalOverride()->behaviorModules().nuggets())
+	{
+		const SpecialPowerModuleData *data = dynamic_cast<const SpecialPowerModuleData *>(n.data.get());
+		if (data && data->m_specialPowerTemplateName == "SpecialAbilityLightningSword")
+		{
+			CHECK(data->m_specialPowerTemplate == sword); // ce que compare Object::getSpecialPowerModule
+			++modules;
+		}
+	}
+	CHECK(modules == 1);
+}
+
+TEST_CASE("bfme1 isolation retail: every RadiusCursorType of BFME1's buttons names a cursor of InGameUI (lotrbfme 0xCF4158, 0x12B6078)")
+{
+	const char *install = std::getenv("BFME1_INSTALL");
+	if (!install || !*install)
+	{
+		retailtest::printSkip("BFME1 object loading (BFME1_INSTALL unset)");
+		return;
+	}
+	Win32BIGFileSystem fs;
+	mountBfme1Install(fs, std::filesystem::u8path(install));
+	std::string error;
+	RadiusCursorTemplates cursors;
+	REQUIRE_MESSAGE(cursors.load(fs, &error), error);
+	const RadiusDecalTemplate *sword = cursors.find("LIGHTNING_SWORD");
+	REQUIRE(sword);
+	CHECK(sword->texture == "SCCLightningSword");
+	CHECK(sword->style == 0x20u); // SHADOW_ALPHA_DECAL
+	CHECK(sword->opacityMin == doctest::Approx(0.2f)); // tolerance: INI::parsePercentToReal divise le pourcentage par 100 en flottant
+	CHECK(sword->opacityMax == doctest::Approx(0.6f)); // tolerance: comme au-dessus
+	RetailObjectWorld world(fs);
+	REQUIRE_MESSAGE(world.load(&error), error);
+	const auto context = world.enterContext();
+	int named = 0;
+	for (const std::string &name : world.commands().buttonNames())
+	{
+		const CommandButton *button = world.commands().findCommandButton(name);
+		REQUIRE(button);
+		if (!button->m_radiusCursor.empty() && button->m_radiusCursor != "NONE")
+		{
+			INFO(name << " " << button->m_radiusCursor);
+			// RevealMapAreaRadiusCursor est commenté dans l'InGameUI.ini de BFME1 : ce type n'a pas de texture, donc pas de cercle
+			CHECK((cursors.find(button->m_radiusCursor) != nullptr) == (button->m_radiusCursor != "REVEAL_MAP_AREA"));
+			++named;
+		}
+	}
+	CHECK(named == 58);
+}
+
+TEST_CASE("bfme1 isolation retail: installed BFME1 object world loads without aborted files")
+{
+	const char *install = std::getenv("BFME1_INSTALL");
+	if (!install || !*install)
+	{
+		retailtest::printSkip("BFME1 object loading (BFME1_INSTALL unset)");
+		return;
+	}
+	Win32BIGFileSystem fs;
+	std::string error;
+	mountBfme1Install(fs, std::filesystem::u8path(install));
 	REQUIRE(isBfme1Data(fs));
 	RetailObjectWorld world(fs);
 	REQUIRE_MESSAGE(world.load(&error), error);

@@ -163,6 +163,72 @@ const FieldParse kInGameUiFields[] = {
 };
 #undef MESSAGE_FIELD
 
+// FAITS CIBLE BFME1 (lotrbfme.exe) : pas de bloc RadiusCursorTemplate, chaque type de RadiusCursorType a son champ dans InGameUI (table à 0xCF4158 : m_radiusCursors,
+// 0x30 octets par type à partir de + 0x8C4), dans l'ordre des noms de RadiusCursorType (0x12B6078, indice 0 NONE). Le champ est donc rangé sous le nom du type
+void parseFixedRadiusDecalTemplate(INI *ini, void *instance, void *, const void *typeName)
+{
+	LoadState *state = static_cast<LoadState *>(instance);
+	RadiusDecalTemplate t;
+	ini->initFromINI(&t, kRadiusDecalFieldParse);
+	(*state->out)[lower(static_cast<const char *>(typeName))] = t;
+}
+const FieldParse kBfme1InGameUiRows[] = {
+	{ "AttackDamageAreaRadiusCursor", parseFixedRadiusDecalTemplate, "ATTACK_DAMAGE_AREA", 0 },
+	{ "AttackScatterAreaRadiusCursor", parseFixedRadiusDecalTemplate, "ATTACK_SCATTER_AREA", 0 },
+	{ "AttackContinueAreaRadiusCursor", parseFixedRadiusDecalTemplate, "ATTACK_CONTINUE_AREA", 0 },
+	{ "GuardAreaRadiusCursor", parseFixedRadiusDecalTemplate, "GUARD_AREA", 0 },
+	{ "EmergencyRepairRadiusCursor", parseFixedRadiusDecalTemplate, "EMERGENCY_REPAIR", 0 },
+	{ "FriendlySpecialPowerRadiusCursor", parseFixedRadiusDecalTemplate, "FRIENDLY_SPECIALPOWER", 0 },
+	{ "OffensiveSpecialPowerRadiusCursor", parseFixedRadiusDecalTemplate, "OFFENSIVE_SPECIALPOWER", 0 },
+	{ "SuperweaponScatterAreaRadiusCursor", parseFixedRadiusDecalTemplate, "SUPERWEAPON_SCATTER_AREA", 0 },
+	{ "ParticleCannonRadiusCursor", parseFixedRadiusDecalTemplate, "PARTICLECANNON", 0 },
+	{ "A10StrikeRadiusCursor", parseFixedRadiusDecalTemplate, "A10STRIKE", 0 },
+	{ "CarpetBombRadiusCursor", parseFixedRadiusDecalTemplate, "CARPETBOMB", 0 },
+	{ "DaisyCutterRadiusCursor", parseFixedRadiusDecalTemplate, "DAISYCUTTER", 0 },
+	{ "ParadropRadiusCursor", parseFixedRadiusDecalTemplate, "PARADROP", 0 },
+	{ "RevealMapAreaRadiusCursor", parseFixedRadiusDecalTemplate, "REVEAL_MAP_AREA", 0 },
+	{ "ElvenWoodMapRadiusCursor", parseFixedRadiusDecalTemplate, "SPELL_BOOK_ELVEN_WOOD", 0 },
+	{ "TaintMapRadiusCursor", parseFixedRadiusDecalTemplate, "SPELL_BOOK_TAINT", 0 },
+	{ "NuclearMissileRadiusCursor", parseFixedRadiusDecalTemplate, "NUCLEARMISSILE", 0 },
+	{ "ArtilleryRadiusCursor", parseFixedRadiusDecalTemplate, "ARTILLERYBARRAGE", 0 },
+	{ "ClusterMinesRadiusCursor", parseFixedRadiusDecalTemplate, "CLUSTERMINES", 0 },
+	{ "ScudStormRadiusCursor", parseFixedRadiusDecalTemplate, "SCUDSTORM", 0 },
+	{ "AnthraxBombRadiusCursor", parseFixedRadiusDecalTemplate, "ANTHRAXBOMB", 0 },
+	{ "AmbushRadiusCursor", parseFixedRadiusDecalTemplate, "AMBUSH", 0 },
+	{ "RadarRadiusCursor", parseFixedRadiusDecalTemplate, "RADAR", 0 },
+	{ "SpyDroneRadiusCursor", parseFixedRadiusDecalTemplate, "SPYDRONE", 0 },
+	{ "ArrowStormRadiusCursor", parseFixedRadiusDecalTemplate, "ARROWSTORM", 0 },
+	{ "LightningSwordRadiusCursor", parseFixedRadiusDecalTemplate, "LIGHTNING_SWORD", 0 },
+	{ "SummonBalrogRadiusCursor", parseFixedRadiusDecalTemplate, "SUMMON_BALROG", 0 },
+	{ "FireBreathRadiusCursor", parseFixedRadiusDecalTemplate, "FIRE_BREATH", 0 },
+	{ "TrainingRadiusCursor", parseFixedRadiusDecalTemplate, "TRAINING", 0 },
+	{ "LeapRadiusCursor", parseFixedRadiusDecalTemplate, "LEAP", 0 },
+	{ "SummonOathBreakersRadiusCursor", parseFixedRadiusDecalTemplate, "SUMMON_OATH_BREAKERS", 0 },
+	{ "AthelasRadiusCursor", parseFixedRadiusDecalTemplate, "ATHELAS", 0 },
+	{ "FellBeastSwoopRadiusCursor", parseFixedRadiusDecalTemplate, "FELL_BEAST_SWOOP", 0 },
+	{ "EagleSwoopRadiusCursor", parseFixedRadiusDecalTemplate, "EAGLE_SWOOP", 0 },
+	{ "IndustryRadiusCursor", parseFixedRadiusDecalTemplate, "INDUSTRY", 0 },
+	{ "DevastationRadiusCursor", parseFixedRadiusDecalTemplate, "DEVASTATION", 0 },
+	{ "TaintRadiusCursor", parseFixedRadiusDecalTemplate, "TAINT", 0 },
+	{ "EyeOfSauronRadiusCursor", parseFixedRadiusDecalTemplate, "EYE_OF_SAURON", 0 },
+	{ "HealRadiusCursor", parseFixedRadiusDecalTemplate, "HEAL", 0 },
+	{ "ElvenAlliesRadiusCursor", parseFixedRadiusDecalTemplate, "ELVEN_ALLIES", 0 },
+	{ "RohanAlliesRadiusCursor", parseFixedRadiusDecalTemplate, "ROHAN_ALLIES", 0 },
+	{ "ElvenWoodRadiusCursor", parseFixedRadiusDecalTemplate, "ELVEN_WOOD", 0 },
+	{ "EntAlliesRadiusCursor", parseFixedRadiusDecalTemplate, "ENT_ALLIES", 0 },
+	{ "ArmyOfTheDeadRadiusCursor", parseFixedRadiusDecalTemplate, "ARMY_OF_THE_DEAD", 0 },
+	{ "EagleAlliesRadiusCursor", parseFixedRadiusDecalTemplate, "EAGLE_ALLIES", 0 },
+	{ "KingsFavorRadiusCursor", parseFixedRadiusDecalTemplate, "KINGS_FAVOR", 0 },
+	{ "DominateRadiusCursor", parseFixedRadiusDecalTemplate, "DOMINATE", 0 },
+	{ "SpeechCraftRadiusCursor", parseFixedRadiusDecalTemplate, "SPEECH_CRAFT", 0 },
+	{ "CaptainOfGondorRadiusCursor", parseFixedRadiusDecalTemplate, "CAPTAIN_OF_GONDOR", 0 },
+	{ "ArcheryTrainingRadiusCursor", parseFixedRadiusDecalTemplate, "ARCHERY_TRAINING", 0 },
+	{ "WarChantRadiusCursor", parseFixedRadiusDecalTemplate, "WAR_CHANT", 0 },
+	{ "PalantirVisionRadiusCursor", parseFixedRadiusDecalTemplate, "PALANTIR_VISION", 0 },
+	{ nullptr, nullptr, nullptr, 0 },
+};
+const Bfme1FieldRowsRegistration kBfme1InGameUiRowsRegistration(kInGameUiFields, kBfme1InGameUiRows);
+
 bool run(ArchiveFileSystem *fs, const std::string &path, const std::string *memory, std::map<std::string, RadiusDecalTemplate> &out, TerrainResourceUiSettings &ui, PlayerMessageSettings &messages,
 	std::string *error)
 {

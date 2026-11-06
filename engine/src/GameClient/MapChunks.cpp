@@ -173,6 +173,21 @@ bool parsePolygonTriggers(DataChunkInput &file, DataChunkInfo *info, void *ud)
 			p.z = file.readInt();
 			t.points.push_back(p);
 		}
+		if (m->bfme1Data)
+		{
+			// notre version, BFME1 : ses cartes n'ont pas de bloc TriggerAreas, leurs zones de script sont ici (ZH TerrainLogic::getTriggerAreaByName parcourt
+			// cette liste). Les scripts les cherchent par leur nom (ScriptEngine::findTrigger)
+			TriggerArea area;
+			area.name = t.name;
+			area.layer = t.layer;
+			area.id = t.id;
+			for (const PolygonTriggerPoint &p : t.points)
+			{
+				area.points.push_back(Point2F{ (float)p.x, (float)p.y });
+			}
+			m->hasTriggerAreas = true;
+			m->triggerAreas.push_back(std::move(area));
+		}
 		m->polygonTriggers.push_back(std::move(t));
 	}
 	return true;

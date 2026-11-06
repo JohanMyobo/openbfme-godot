@@ -716,7 +716,9 @@ bool LiveGameAudio::applyScriptRequest(const ScriptClientRequest &r)
 	const bool sound = a == "PLAY_SOUND_EFFECT" || a == "SPEECH_PLAY" || a == "SOUND_PLAY_NAMED" || a == "PLAY_SOUND_EFFECT_AT" || a == "MISSION_OBJECTIVE_SOUND";
 	const bool music = a == "MUSIC_SET_TRACK" || a == "MUSIC_PLAY_TRACK_FINITE_TIMES";
 	const bool volume = a == "MUSIC_SET_VOLUME" || a == "SOUND_SET_VOLUME" || a == "SPEECH_SET_VOLUME";
-	if (!sound && !music && !volume)
+	const bool push = a == "AUDIO_PUSH_MUSIC" || a == "MUSIC_PUSH_TRACK_FINITE_TIMES" || a == "MUSIC_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY";
+	const bool pop = a == "AUDIO_POP_MUSIC";
+	if (!sound && !music && !volume && !push && !pop)
 	{
 		return false;
 	}
@@ -738,7 +740,42 @@ bool LiveGameAudio::applyScriptRequest(const ScriptClientRequest &r)
 	{
 		return true;
 	}
+	if (pop)
+	{
+		// notre version, BFME1 (INFÉRENCE, S-5017) : AUDIO_POP_MUSIC (fadeOut, fadeIn) : la piste du sommet s'arrête, celle d'en dessous reprend
+		const bool fadeOut = r.params[0].intValue != 0;
+		const bool fadeIn = r.params.size() > 1 && r.params[1].intValue != 0;
+		if (!m_musicStack.empty())
+		{
+			m_musicStack.pop_back();
+		}
+		m_audio.stopMusic(fadeOut);
+		if (!m_musicStack.empty() && m_audio.playMusic(m_musicStack.back(), fadeIn) == 0)
+		{
+			++m_scriptAudio.unknownEvents;
+		}
+		return true;
+	}
 	const std::string &name = r.params[0].stringValue;
+	if (push)
+	{
+		// notre version, BFME1 (INFÉRENCE, S-5017) : AUDIO_PUSH_MUSIC (piste, fadeOut, fadeIn) ; les formes finies (piste, nombre, fadeOut, fadeIn[, drapeau]) : la piste passe
+		// au sommet ; le nombre de passages finit par le drapeau du script (ScriptEngine::scheduleMusicNotify), qui la retire
+		const size_t fo = a == "AUDIO_PUSH_MUSIC" ? 1 : 2;
+		const bool fadeOut = r.params.size() > fo && r.params[fo].intValue != 0;
+		const bool fadeIn = r.params.size() > fo + 1 && r.params[fo + 1].intValue != 0;
+		m_musicStack.push_back(name);
+		m_audio.stopMusic(fadeOut);
+		if (m_audio.playMusic(name, fadeIn) == 0)
+		{
+			++m_scriptAudio.unknownEvents;
+		}
+		else
+		{
+			++m_scriptAudio.played;
+		}
+		return true;
+	}
 	if (music)
 	{
 		// RW 0x7C0D9B: the playing music stops (TheAudio vslot 0x8C, faded when the fade-out parameter is set), the track by name starts, faded in

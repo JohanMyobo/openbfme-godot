@@ -33,12 +33,9 @@
 namespace godot
 {
 
-namespace
-{
-
 // RotWK / BFME2: a .dds is a DDS, anything else a TGA. community PR #36, BFME1 mounted only (docs/BFME1.md): BFME1 installs carry PNG / JPEG files,
 // some under .dds names, so the bytes' signature decides
-Error decodeTexture(const Ref<Image> &image, const PackedByteArray &buffer, bool dds)
+Error Decode_Retail_Texture(const Ref<Image> &image, const PackedByteArray &buffer, bool dds)
 {
 	if (bfme1Mounted())
 	{
@@ -59,6 +56,9 @@ Error decodeTexture(const Ref<Image> &image, const PackedByteArray &buffer, bool
 	}
 	return dds ? image->load_dds_from_buffer(buffer) : image->load_tga_from_buffer(buffer);
 }
+
+namespace
+{
 
 // lane SDK-0: an asset pack's texture is decoded by its bytes (a modder may save a PNG for a retail .tga name)
 Error decodePackTexture(const Ref<Image> &image, const PackedByteArray &buffer)
@@ -203,6 +203,9 @@ void W3D_Ensure_Light_Globals()
 	// lane OCCLUDE-1: the behind-building colours and their switch (W3D_Set_Occlusion), off until a game sets them
 	rs->global_shader_parameter_add(StringName("w3d_occl_on"), RenderingServer::GLOBAL_VAR_TYPE_FLOAT, 0.0f);
 	rs->global_shader_parameter_add(StringName("w3d_occl_colors"), RenderingServer::GLOBAL_VAR_TYPE_SAMPLER2D, Variant());
+	rs->global_shader_parameter_add(StringName("w3d_shroud_on"), RenderingServer::GLOBAL_VAR_TYPE_FLOAT, 0.0f);
+	rs->global_shader_parameter_add(StringName("w3d_shroud_tex"), RenderingServer::GLOBAL_VAR_TYPE_SAMPLER2D, Variant());
+	rs->global_shader_parameter_add(StringName("w3d_shroud_rect"), RenderingServer::GLOBAL_VAR_TYPE_VEC4, Vector4(0.0f, 0.0f, 1.0f, 1.0f));
 	// lane VISUAL-2: the vegetation SwayOffsets 1 .. 10 (W3DVegetationSway, RW 0x4E61EE; W3D axes), zero until a map's trees sway
 	for (int i = 1; i <= 10; ++i)
 	{
@@ -236,6 +239,21 @@ void W3D_Set_Fogged_Light_Frac(float frac)
 	if (RenderingServer *rs = RenderingServer::get_singleton())
 	{
 		rs->global_shader_parameter_set(StringName("w3d_fogged_frac"), frac);
+	}
+}
+
+void W3D_Set_Model_Shroud(bool on, const Ref<Texture2D> &levels, const Vector2 &origin, const Vector2 &extent)
+{
+	W3D_Ensure_Light_Globals();
+	if (RenderingServer *rs = RenderingServer::get_singleton())
+	{
+		const bool drawn = on && levels.is_valid();
+		rs->global_shader_parameter_set(StringName("w3d_shroud_on"), drawn ? 1.0f : 0.0f);
+		if (drawn)
+		{
+			rs->global_shader_parameter_set(StringName("w3d_shroud_tex"), levels);
+			rs->global_shader_parameter_set(StringName("w3d_shroud_rect"), Vector4(origin.x, origin.y, extent.x, extent.y));
+		}
 	}
 }
 
@@ -498,7 +516,7 @@ Ref<Texture2D> W3DMaterialFactory::Load_Texture(const std::string &name, std::ve
 		}
 	}
 	else
-		err = decodeTexture(image, buffer, res.IsDDS);
+		err = Decode_Retail_Texture(image, buffer, res.IsDDS);
 	if (err != OK || image.is_null() || image->is_empty())
 	{
 		errors.push_back("could not decode texture " + res.Path);
@@ -557,7 +575,7 @@ Ref<Texture2D> W3DMaterialFactory::Recolored_House_Texture(const std::string &na
 	  notes.push_back(note);
 	  PackedHouseTextureNotes[cacheKey] = note;
 	 }
-	} else err = decodeTexture(image, buffer, res.IsDDS);
+	} else err = Decode_Retail_Texture(image, buffer, res.IsDDS);
 	if (err != OK || image.is_null() || image->is_empty())
 	{
 		errors.push_back("could not decode texture " + res.Path);

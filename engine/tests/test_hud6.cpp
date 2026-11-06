@@ -1242,11 +1242,11 @@ TEST_CASE("hud6 recovered command costs retail")
 	for (size_t i = 0; i < TheSpecialPowerStore->getNumSpecialPowers(); ++i)
 	{
 		const auto *p = TheSpecialPowerStore->getSpecialPowerByIndex(i);
-		if (p->m_unitCost != 0) { sacrifice = p; break; }
+		if (p->getUnitCost() != 0) { sacrifice = p; break; }
 	}
 	REQUIRE(sacrifice);
 	command.m_specialPowerName = sacrifice->getName();
-	CHECK(compose().cost == u"Units: " + number(sacrifice->m_unitCost));
+	CHECK(compose().cost == u"Units: " + number(sacrifice->getUnitCost()));
 	command.m_specialPowerName = "SpellBookHeal";
 	CHECK(compose().cost.empty());
 	producer = h.rig.make("CampFlag", 2200, 1400);

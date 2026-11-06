@@ -19,8 +19,10 @@
 //     parseIndexList RW 0x42E956 over RW 0xDA5C90; the reals parseReal RW 0x42ED00; ObjectFilter / ForbiddenObjectFilter RW 0x76392F;
 //     PreventActivationConditions RW 0x7B1E5C -> 0x7B1B4C (ObjectStatus names RW 0xD8AFF0).
 //   * the block parser RW 0x7B212F: name = getNextToken; existing = findSpecialPowerTemplate(name) (RW 0x7B1D07: the vector in order, comparing
-//     each entry's FINAL OVERRIDE's name, returns that final override). Load type 2: existing -> a new template copies it (RW 0x7B1E6C, every field
-//     including name and id), the existing one links it (+4) and it is marked an override; no existing -> a new template that copies the template
+//     each entry's FINAL OVERRIDE's name, returns the ENTRY, RW 0x7B1D71: a module keeps the entry it found while the data loaded, and
+//     Object::getSpecialPowerModule compares that pointer, RW 0x8969D1, so a map.ini override must not change what the lookup returns;
+//     the getters read the final override instead, ZH's getFO). Load type 2: existing -> a new template copies its final override (RW 0x7B2182, 0x7B1E6C, every field
+//     including name and id), that final override links it (+4, RW 0x7B21CE) and it is marked an override; no existing -> a new template that copies the template
 //     named "DefaultSpecialPower" when one exists (RW 0xC34FAC, lookup RW 0x69C146), then id = ++counter, name set (RW 0x7B1ACD), marked an
 //     override and appended. Any other load type: existing -> INIException(3, "Special power '%s' already defined") (RW 0xC34F88; load type 5
 //     included); new -> the same DefaultSpecialPower copy, id = ++counter (the first template has id 1), appended. Then the table parses.
@@ -58,15 +60,38 @@ public:
 	SpecialPowerTemplate *getFinalOverride() { return m_nextOverride ? m_nextOverride->getFinalOverride() : this; }
 	const SpecialPowerTemplate *getFinalOverride() const { return m_nextOverride ? m_nextOverride->getFinalOverride() : this; }
 
-	const std::string &getName() const { return m_name; }
-	unsigned getID() const { return m_id; }
-	int getSpecialPowerType() const { return m_type; }
-	unsigned getReloadTime() const { return m_reloadTime; }
-	const ScienceVec &getRequiredSciences() const { return m_requiredSciences; }
-	bool isSharedNSync() const { return m_sharedNSync; }
-	bool hasPublicTimer() const { return m_publicTimer; }
-	std::uint32_t getFlags() const { return m_flags; }
-	float getRadiusCursorRadius() const { return m_radiusCursorRadius; }
+	// Every value is the final override's (ZH SpecialPowerTemplate::getFO): the pointer stays the entry of the store, RW 0x7B1D07.
+	const std::string &getName() const { return getFinalOverride()->m_name; }
+	unsigned getID() const { return getFinalOverride()->m_id; }
+	int getSpecialPowerType() const { return getFinalOverride()->m_type; }
+	unsigned getReloadTime() const { return getFinalOverride()->m_reloadTime; }
+	const ScienceVec &getRequiredSciences() const { return getFinalOverride()->m_requiredSciences; }
+	bool isSharedNSync() const { return getFinalOverride()->m_sharedNSync; }
+	bool hasPublicTimer() const { return getFinalOverride()->m_publicTimer; }
+	std::uint32_t getFlags() const { return getFinalOverride()->m_flags; }
+	float getRadiusCursorRadius() const { return getFinalOverride()->m_radiusCursorRadius; }
+	int getLightPointCost() const { return getFinalOverride()->m_lightPointCost; }
+	const std::string &getInitiateSound() const { return getFinalOverride()->m_initiateSound; }
+	const std::string &getInitiateAtLocationSound() const { return getFinalOverride()->m_initiateAtLocationSound; }
+	const std::string &getUnitSpecificInitiateVoice() const { return getFinalOverride()->m_unitSpecificInitiateVoice; }
+	const std::string &getUnitSpecificEnterStateVoice() const { return getFinalOverride()->m_unitSpecificEnterStateVoice; }
+	const std::string &getEvaEventToPlayOnSuccess() const { return getFinalOverride()->m_evaEventToPlayOnSuccess; }
+	unsigned getDetectionTime() const { return getFinalOverride()->m_detectionTime; }
+	unsigned getViewObjectDuration() const { return getFinalOverride()->m_viewObjectDuration; }
+	float getViewObjectRange() const { return getFinalOverride()->m_viewObjectRange; }
+	const std::string &getPalantirMovie() const { return getFinalOverride()->m_palantirMovie; }
+	const std::shared_ptr<const ObjectFilter> &getObjectFilter() const { return getFinalOverride()->m_objectFilter; }
+	const std::array<std::uint32_t, 4> &getPreventActivationConditions() const { return getFinalOverride()->m_preventActivationConditions; }
+	float getMaxCastRange() const { return getFinalOverride()->m_maxCastRange; }
+	const std::shared_ptr<const ObjectFilter> &getForbiddenObjectFilter() const { return getFinalOverride()->m_forbiddenObjectFilter; }
+	float getForbiddenObjectRange() const { return getFinalOverride()->m_forbiddenObjectRange; }
+	int getUnitCost() const { return getFinalOverride()->m_unitCost; }
+	int getUnitCostDeathType() const { return getFinalOverride()->m_unitCostDeathType; }
+
+private:
+	friend class SpecialPowerStore;
+	friend struct SpecialPowerFieldRows; // the INI rows, the only other place that names these fields
+	friend struct SpecialPowerTemplateTestAccess; // tests that make a template by hand, without INI
 
 	SpecialPowerTemplate *m_nextOverride = nullptr;  // +0x04
 	bool m_isOverride = false;                       // +0x08
@@ -110,12 +135,12 @@ public:
 	static void parseSpecialPowerDefinitionGlobal(INI *ini); // throws INIException(3, "TheSpecialPowerStore==NULL") without a store
 	void resetOverrides();
 
-	// RW 0x7B1D07 / 0x69C146: the final override of the template with this name (case-sensitive), null when none
+	// RW 0x7B1D07 / 0x69C146: the store's entry whose final override has this name (case-sensitive), null when none
 	const SpecialPowerTemplate *findSpecialPowerTemplate(const std::string &name) const;
-	// by id (ZH findSpecialPowerTemplateByID: the stored entries' ids; the final override)
+	// by id: the store's entry too (ZH findSpecialPowerTemplateByID, lotrbfme 0x0EB690)
 	const SpecialPowerTemplate *findSpecialPowerTemplateByID(unsigned id) const;
 	size_t getNumSpecialPowers() const { return m_templates.size(); }
-	const SpecialPowerTemplate *getSpecialPowerByIndex(size_t i) const { return i < m_templates.size() ? m_templates[i]->getFinalOverride() : nullptr; } // RW 0x7B1AE7
+	const SpecialPowerTemplate *getSpecialPowerByIndex(size_t i) const { return i < m_templates.size() ? m_templates[i] : nullptr; } // RW 0x7B1AE7: the entry
 
 	static const char *const *specialPowerTypeNames(); // RW 0xDA5C90
 	static const char *const *specialPowerFlagNames(); // RW 0xDA5F34

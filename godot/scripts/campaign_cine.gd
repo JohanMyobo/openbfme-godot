@@ -29,6 +29,7 @@ var movie_hook := Callable() # lane CAMP-1H: PLAY_MOVIE_IN_GAME's title goes the
 var dev_overlay := true      # lane CAMP-2: the developer text (logic frame, camera / input state, the objective list): the viewers' only; the game sets it from --dev-overlay
 var input_hook := Callable() # lane OWNERFIX-1: the scripts' DISABLE_INPUT / ENABLE_INPUT (bool enable) (game.gd _script_input)
 var _ui: CanvasLayer = null # lane SAVE-UI1: the presentation's layer (set_covered)
+var _fade_ui: CanvasLayer = null # notre version : la couche du fondu, sous l'interface
 var control_bar_hook := Callable() # lane CAMP-2: HideControlBar / ShowControlBar (bool hidden) for CAMERA_LETTERBOX_BEGIN / END and HIDE_UI / SHOW_UI (game.gd)
 var hud: Object = null       # lane CAMPUI-1: the game's HUD (GodotInGameHud): in hud_mode the script's camera moves drive its TacticalCamera
 var shell: Object = null     # lane CAMPUI-1: the shell (AptMenuPlayer): the caption's font (shell_font, the menus' font substitution)
@@ -51,6 +52,8 @@ var objectives_open := Callable() # lane CAMPUI-1: () -> int: 2 the objectives s
 func set_covered(covered: bool) -> void:
 	if _ui != null:
 		_ui.visible = not covered
+	if _fade_ui != null:
+		_fade_ui.visible = not covered
 
 
 func setup(w: Node3D, cam: Camera3D, start: Vector3, ui_parent: Node, audio: Node = null) -> void:
@@ -109,7 +112,12 @@ void fragment() {
 	_status = Label.new()
 	_status.add_theme_color_override("font_outline_color", Color.BLACK)
 	_status.add_theme_constant_override("outline_size", 4)
-	ui.add_child(_fade)
+	# notre version : le quad du fondu fait partie du rendu 3D (la fin de W3DStatusCircle::Render, RW 0x48E0EE) : l'interface Apt se dessine après, par-dessus. La bannière
+	# de victoire (VICTORY_SCREEN, GuiFX.apt) reste donc lumineuse sur le noir du fondu de fin de mission, qui l'éteignait quand il était dessiné au-dessus
+	_fade_ui = CanvasLayer.new()
+	_fade_ui.layer = -1
+	_fade_ui.add_child(_fade)
+	ui_parent.add_child(_fade_ui)
 	ui.add_child(_top)
 	ui.add_child(_bottom)
 	ui.add_child(_caption)
@@ -152,7 +160,7 @@ func _process(delta: float) -> void:
 		_drive()
 	var camera_request := false # lane CAMPUI-1: a camera action arrived this frame
 	for r in world.take_script_requests():
-		if String(r.action) in ["MOVE_CAMERA_TO", "RESET_CAMERA", "ROTATE_CAMERA", "CAMERA_LOOK_TOWARD_WAYPOINT", "CAMERA_FOLLOW_NAMED", "CAMERA_STOP_FOLLOW"]:
+		if String(r.action) in ["MOVE_CAMERA_TO", "RESET_CAMERA", "ROTATE_CAMERA", "ROTATE_CAMERA_TO_ANGLE", "CAMERA_LOOK_TOWARD_WAYPOINT", "CAMERA_FOLLOW_NAMED", "CAMERA_STOP_FOLLOW"]:
 			camera_request = true
 		if r.action == "RESET_CAMERA":
 			_pending_reset = true

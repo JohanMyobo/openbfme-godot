@@ -139,6 +139,7 @@ void ScriptEngine::reset()
 	m_currentScript = nullptr;
 	m_clientRequests.clear();
 	m_endRequests.clear();
+	m_victoryScreenRequests = 0;
 	m_sequential.clear();
 	for (size_t i = 0; i < m_acquiredSciences.size(); ++i) // donor Open-BFME-2 ScriptEngine::reset (0x00209ABE): the 20 m_acquiredSciences vectors cleared
 	{
@@ -838,6 +839,7 @@ void ScriptEngine::update()
 			--kv.second.value;
 		}
 	}
+	updateMusicNotifies();
 	PlayerList &players = m_logic.players();
 	for (size_t i = 0; i < m_sides.size(); ++i)
 	{
@@ -2494,6 +2496,44 @@ bool ScriptEngine::hasFinishedAudio(const std::string &name, bool consume)
 		m_audioTimers.erase(it); // RW 0x702055
 	}
 	return true;
+}
+
+namespace
+{
+const char kMusicNotifyPrefix[] = "<music notify>";
+}
+
+void ScriptEngine::scheduleMusicNotify(const std::string &track, int count, const std::string &flagName)
+{
+	std::int32_t ms = 0;
+	bool picked = false;
+	if (!m_host || !m_host->audioLengthMs(track, ms, picked) || ms <= 0 || count <= 0)
+	{
+		note("MUSIC_PUSH_TRACK_FINITE_TIMES_AND_NOTIFY: la piste '" + track + "' n'a pas de durée : son drapeau ne se lèvera pas");
+		return;
+	}
+	const std::pair<std::string, std::string> key = qualify(flagName);
+	AudioTimer t;
+	t.name = kMusicNotifyPrefix + key.first + "/" + key.second;
+	t.endFrame = m_logic.getFrame() + (UnsignedInt)(ms / 200) * (UnsignedInt)count; // 200 ms par image logique (RW 0x759C2B)
+	m_audioTimers.push_back(t);
+}
+
+void ScriptEngine::updateMusicNotifies()
+{
+	const UnsignedInt frame = m_logic.getFrame();
+	const size_t prefix = sizeof(kMusicNotifyPrefix) - 1;
+	for (size_t i = 0; i < m_audioTimers.size();)
+	{
+		const AudioTimer &t = m_audioTimers[i];
+		if (t.name.compare(0, prefix, kMusicNotifyPrefix) == 0 && frame >= t.endFrame)
+		{
+			flag(t.name.substr(prefix)) = true;
+			m_audioTimers.erase(m_audioTimers.begin() + (std::ptrdiff_t)i);
+			continue;
+		}
+		++i;
+	}
 }
 
 // ---- reports ------------------------------------------------------------------------------------------------------------------------------------

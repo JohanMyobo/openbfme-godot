@@ -134,8 +134,6 @@ func begin_region_mission(map_screen: Node, options: Dictionary) -> void:
 	print("CAMPAIGN region mission: %s" % region_map)
 	if not await show_load_screen({"load_screen_music": String(options.music), "load_screen_image": String(options.still)}):
 		return
-	if not String(options.voice).is_empty():
-		game._audio.play_sound(String(options.voice)) # SkirmishVoiceTrack
 	var rep: Dictionary = world.start_region_mission({"map": region_map, "difficulty": difficulty, "slots": options.get("slots", []), "walk_on": options.get("walk_on", {}), "progress": Callable(game, "_on_load_progress"), "test_hooks": hooks})
 	game._report = rep
 	print("CAMPAIGN load ok=%s errors=%s" % [rep.ok, str(rep.get("errors", []).slice(0, 5))])
@@ -145,8 +143,28 @@ func begin_region_mission(map_screen: Node, options: Dictionary) -> void:
 	if movies and not String(options.movie).is_empty():
 		game._audio.stop_music(false)
 		await play_movie(String(options.movie))
+	await _play_region_voice(String(options.voice))
 	enter_mission(rep)
 	game._game_kind = "region %s" % region_map
+
+
+## notre version, BFME1 : SkirmishVoiceTrack, le récit (Galadriel à la Moria), après le film, sur l'image de chargement. INFÉRENCE (S-5017), d'après le chargement d'une mission
+## de Zero Hour (SinglePlayerLoadScreen : le film, puis l'image et la voix, attendue) : chargée en quelques secondes ici, la mission la couvrirait. Un clic ou une touche la coupe.
+func _play_region_voice(voice: String) -> void:
+	if voice.is_empty() or not movies or auto_win_all:
+		return
+	var handle: int = game._audio.play_sound(voice)
+	if handle <= 0:
+		printerr("CAMPAIGN region voice %s: not played" % voice)
+		return
+	print("CAMPAIGN region voice: %s" % voice)
+	var from := Time.get_ticks_msec() + 300
+	while Array(game._audio.get_playing()).has(voice):
+		await get_tree().process_frame
+		if Time.get_ticks_msec() > from and (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) or Input.is_key_pressed(KEY_ESCAPE) or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_ENTER)):
+			game._audio.remove_event(handle)
+			print("CAMPAIGN region voice skipped")
+			break
 
 
 ## lane CAMP-1H: a campaign movie (awaited; nothing when --movies=off or the title is empty)

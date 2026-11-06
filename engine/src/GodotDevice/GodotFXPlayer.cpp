@@ -6,6 +6,7 @@
 #include "GodotDevice/GodotRetailFileSystem.h"
 #include "GodotDevice/GodotW3DMaterial.h"
 #include "GameEngineDevice/W3DDevice/GameClient/W3DHardwareFog.h"
+#include "Common/BfmeGame.h"
 #include "GameClient/ParticleTexture.h"
 
 #include <godot_cpp/classes/camera3d.hpp>
@@ -741,6 +742,8 @@ Ref<Texture2D> FXPlayer::loadTexture(const std::string &name)
 		if (!pre->second.missing.empty())
 		{
 			m_missing.push_back(pre->second.missing);
+			// notre version : aussi dans le journal, une texture introuvable donne un carré blanc en pleine partie et get_stats n'y est lu par personne
+			UtilityFunctions::print("FX missing particle texture: ", toGodot(pre->second.missing));
 		}
 		Ref<Texture2D> out = pre->second.texture;
 		m_preloaded.erase(pre);
@@ -752,6 +755,7 @@ Ref<Texture2D> FXPlayer::loadTexture(const std::string &name)
 	if (!missing.empty())
 	{
 		m_missing.push_back(missing);
+		UtilityFunctions::print("FX missing particle texture: ", toGodot(missing));
 	}
 	m_textures[name] = out;
 	return out;
@@ -816,7 +820,7 @@ Ref<Texture2D> FXPlayer::decodeTexture(const std::string &name, std::string &mis
 		return ImageTexture::create_from_image(white);
 	}
 	ArchiveFileSystem &fs = *m_fs->archive();
-	const ParticleTextureResolution res = ResolveParticleTexture(name, [&](const std::string &p) { return fs.doesFileExist(p); });
+	const ParticleTextureResolution res = ResolveParticleTexture(name, [&](const std::string &p) { return fs.doesFileExist(p); }, isBfme1Data(fs));
 	if (!res.Found)
 	{
 		missing = name;
@@ -842,8 +846,8 @@ Ref<Texture2D> FXPlayer::decodeTexture(const std::string &name, std::string &mis
 			Error err = FAILED;
 			switch (res.Kind)
 			{
-			case ParticleTextureResolution::DDS: err = image->load_dds_from_buffer(buffer); break;
-			case ParticleTextureResolution::TGA: err = image->load_tga_from_buffer(buffer); break;
+			case ParticleTextureResolution::DDS: err = Decode_Retail_Texture(image, buffer, true); break; // notre version : art\textures\excracks.dds est une TGA (BFME1)
+			case ParticleTextureResolution::TGA: err = Decode_Retail_Texture(image, buffer, false); break;
 			case ParticleTextureResolution::JPG: err = image->load_jpg_from_buffer(buffer); break;
 			default: break;
 			}
